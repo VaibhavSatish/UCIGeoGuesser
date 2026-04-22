@@ -10,6 +10,8 @@ import calculateScore from "../score"; // adjust if needed
 import Results from "../results";
 import Guess from "../guess";
 import GameTimer from "../GameTimer";
+import GameOver from "../GameOver";
+
 
 // NOTE: We do not import react-leaflet at all here.
 
@@ -37,10 +39,14 @@ export default function GameApp() {
   /* loadData (same as before) */
   const loadData = async () => {
     const nextRound = currRound + 1;
-    if (nextRound > maxRounds) {
-      setGameOver(true);
-      return;
-    }
+    console.log(nextRound);
+   
+    // if (nextRound > maxRounds) {
+      
+    //   console.log('gameIsOver');
+    //   setGameOver(true);
+    //   return;
+    // }
     setCurrRound(nextRound);
     setHasGuessed(false);
     setGuessCoords(null);
@@ -94,6 +100,16 @@ export default function GameApp() {
     loadData();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    console.log('procked')
+    if (currRound >= maxRounds && hasGuessed) {
+      
+      console.log('gameIsOver');
+      setGameOver(true);
+      return;
+    }
+  },[hasGuessed])
 
   /* Keyboard handlers (Space to lock/confirm guess, Enter to accept and go to next) */
   useEffect(() => {
@@ -212,12 +228,10 @@ export default function GameApp() {
                     {currRound}/{maxRounds}{" "}
                   </span>
                 </div>
-                {gameOver && (
-                  <div className="font-bold">Final Score: {finalScore}</div>
-                )}
+               
               </div>
             </div>
-
+            
             <div className="mt-2 text-white">
               {!gameOver && !hasGuessed ? (
                 <GameTimer
@@ -248,10 +262,10 @@ export default function GameApp() {
                 />
               ) : null}
             </div>
-
+           
             {hasGuessed && guessCoords && !gameOver && (
               <Results
-                onNextImage={() => handleNextImageFromResults()}
+                onNextImage={() => {handleNextImageFromResults();}}
                 score={calculateScore(
                   guessCoords[0],
                   guessCoords[1],
@@ -261,6 +275,15 @@ export default function GameApp() {
               />
             )}
           </div>
+
+          {/* GameOver Stats*/}
+          {gameOver && 
+          <div className="items-center justify-center bg-gray-600/60 border-white h-32 w-64 rounded-md">
+              <div className="mt-2 text-white text-xl">
+                <GameOver finalScore={finalScore}/>
+              </div>
+          </div>}
+          
 
           {/* iframe map in corner */}
           <div
