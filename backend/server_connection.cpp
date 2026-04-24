@@ -1,4 +1,5 @@
 #include "crow.h"
+#include "crow/middlewares/cors.h"
 #include <map>
 #include <string>
 #include <fstream>
@@ -28,7 +29,7 @@ int main() {
             stringstream ss;
             ss << in.rdbuf();
 
-            res["images"][to_string(++id)]["image"] =
+            res["images"][to_string(id++)]["image"] =
                 "data:image/jpeg;base64," +
                 crow::utility::base64encode(ss.str(), ss.str().size());
 

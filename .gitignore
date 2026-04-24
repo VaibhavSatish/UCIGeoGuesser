@@ -2,3 +2,4 @@
 bin
 next/
 node_modules/
+backend/build/
