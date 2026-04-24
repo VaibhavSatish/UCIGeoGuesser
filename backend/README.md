@@ -7,7 +7,7 @@ After downloading docker desktop create a Docker image using the command below:
 
 Run the docker image to create a container
 
-`docker run -d --name backend -v LOCAL_PATH_TO_BACKEND:/backend ucigeoguesser sleep infinity`
+`docker run -p 18080:18080 -d --name backend -v LOCAL_PATH_TO_BACKEND:/backend ucigeoguesser sleep infinity`
 
 Execute the container 
 
