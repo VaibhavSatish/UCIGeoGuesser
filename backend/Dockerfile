@@ -29,13 +29,19 @@ WORKDIR /backend
 COPY . .
 
 # Builds the Build Directory and Connects the CMakeLists.txt to the vcpkg toolchain file to ensure that the dependencies are correctly linked during the build process.
-RUN cmake -B build -S . -DCMAKE_TOOLCHAIN_FILE=/vcpkg/scripts/buildsystems/vcpkg.cmake
+RUN cmake -B build -S . \
+    -DCMAKE_TOOLCHAIN_FILE=/vcpkg/scripts/buildsystems/vcpkg.cmake \
+    -DVCPKG_TARGET_TRIPLET=x64-linux \
+    -DCMAKE_BUILD_TYPE=Release
 
 # Compile the Code
 RUN cmake --build build
+
+# Exposing the port that the server will run on
+EXPOSE 18080
 
 
 
 
 # Default to bash to run commands
-CMD ["bash"]
+CMD ["./build/backend"]

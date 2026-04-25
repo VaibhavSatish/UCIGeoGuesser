@@ -1,4 +1,7 @@
-# To run the backend, download Docker Desktop
+# To run the backend
+
+Download Docker Desktop: 
+
 `https://www.docker.com/products/docker-desktop/`
 
 After downloading docker desktop create a Docker image using the command below:
@@ -11,7 +14,7 @@ Run the docker image to create a container
 
 Execute the container 
 
-`docker exec -it backend bash `
+`docker exec -it backend bash ` or `docker exec -it backend ./build/backend`
 
 # To Run CMake in Docker
 
