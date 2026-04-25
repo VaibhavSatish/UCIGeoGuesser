@@ -13,7 +13,7 @@ int main() {
     auto& cors = app.get_middleware<crow::CORSHandler>().global();
     cors.origin("*").methods("GET"_method);
 
-    CROW_ROUTE(app, "/home").methods("GET"_method) ([](){        
+    CROW_ROUTE(app, "/images").methods("GET"_method) ([](){        
         
         crow::json::wvalue res;
         
@@ -39,7 +39,7 @@ int main() {
 
             res["images"][to_string(id)]["metadata"] = crow::json::load(sst.str());
 
-            if (id == 30) {
+            if (id == 6) {
                 break;
             }
         }
@@ -47,6 +47,7 @@ int main() {
     }); 
 
 
-
-    app.port(18080).multithreaded().run();
+    char* port_env = std::getenv("PORT");
+    int port = (port_env != nullptr) ? std::stoi(port_env) : 18080;
+    app.port(port).multithreaded().run();
 }
