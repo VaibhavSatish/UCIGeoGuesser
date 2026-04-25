@@ -54,7 +54,6 @@ int main() {
     }); 
 
 
-    char* port_env = std::getenv("PORT");
-    int port = (port_env != nullptr) ? std::stoi(port_env) : 18080;
-    app.port(port).multithreaded().run();
+
+    app.port(18080).multithreaded().run();
 }
