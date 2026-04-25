@@ -16,6 +16,9 @@ import GameOver from "../GameOver";
 // NOTE: We do not import react-leaflet at all here.
 
 export default function GameApp() {
+  /* Backend Url */
+  const backendUrl = "http://localhost:18080";
+
   /*Use States*/
   const [loading, setLoading] = useState<boolean>(true);
   const [imageSrc, setImageSrc] = useState<string>("");
@@ -23,6 +26,7 @@ export default function GameApp() {
   const [guessCoords, setGuessCoords] = useState<[number, number] | null>(null);
   const [isHovering, setIsHovering] = useState<boolean>(false);
   const [hasGuessed, setHasGuessed] = useState<boolean>(false);
+
 
   /*Map iframe ref*/
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
@@ -64,8 +68,21 @@ export default function GameApp() {
 
     if (!allImages) {
       try {
-        const res = await fetch("https://ucigeoguesser-208878726965.us-west1.run.app/images");
-        const data = await res.json();
+        const res = await fetch(`${backendUrl}/images`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({totalRounds: maxRounds })
+        })
+  
+        if (!res.ok) {
+          const errData = await res.json().catch(() => null)
+          throw new Error(errData?.detail || `Server error: ${res.status}`)
+        }
+  
+        const data = await res.json()
+  
         allImages = data.images;
         await db.put("homeData", allImages, "allImages");
       } catch (err) {
