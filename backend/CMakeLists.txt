@@ -3,6 +3,15 @@ project(Backend)
 
 set(CMAKE_CXX_STANDARD 17)
 
+# Include dotenv-cpp using FetchContent
+include(FetchContent)
+FetchContent_Declare(
+    laserpants_dotenv
+    GIT_REPOSITORY https://github.com/laserpants/dotenv-cpp
+    GIT_TAG master
+)
+FetchContent_MakeAvailable(laserpants_dotenv)
+
 
 # Find Asio (This often provides a proper target, so we keep it)
 find_package(asio CONFIG REQUIRED)
@@ -10,8 +19,9 @@ find_package(asio CONFIG REQUIRED)
 # Handle Threads (Crow usually requires Pthreads on Linux)
 find_package(Threads REQUIRED)
 
-# Add server_connection.cpp as the main source file for the backend executable
 add_executable(server_connection server_connection.cpp)
+
+add_executable(upload_images upload_images.cpp)
 
 # Rename the binary to "backend" for clarity
 set_target_properties(server_connection PROPERTIES OUTPUT_NAME "backend")
@@ -20,8 +30,13 @@ set_target_properties(server_connection PROPERTIES OUTPUT_NAME "backend")
 target_include_directories(server_connection PRIVATE ${CROW_INCLUDE_DIR})
 
 # 5. Link only actual libraries (Asio and Threads)
-# Remove 'crow::crow' from here!
 target_link_libraries(server_connection PRIVATE 
     asio::asio 
     Threads::Threads
+)
+
+
+
+target_include_directories(upload_images PRIVATE 
+    ${laserpants_dotenv_SOURCE_DIR}/include
 )

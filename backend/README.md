@@ -1,4 +1,4 @@
-# To run the backend
+# To Run the Backend
 
 Download Docker Desktop: 
 
@@ -16,7 +16,7 @@ Execute the container
 
 `docker exec -it backend bash ` or `docker exec -it backend ./build/backend`
 
-# To Run CMake in Docker
+# To Run CMake in Docker (Not Necessary Runned by Docker)
 
 Initialize Build Directory:
 

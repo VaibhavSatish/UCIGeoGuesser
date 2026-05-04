@@ -44,4 +44,4 @@ EXPOSE 18080
 
 
 # Default to bash to run commands
-CMD ["./build/backend"]
+CMD ["./build/backend", "bash"]
