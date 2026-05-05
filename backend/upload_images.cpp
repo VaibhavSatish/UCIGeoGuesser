@@ -5,5 +5,9 @@
 int main() {
     dotenv::init();
 
-    std::cout << std::getenv("BUCKET_NAME") << std::endl;
+    const char* bucket = std::getenv("BUCKET_NAME");
+    if (bucket == nullptr) {
+        std::cerr << "Error: BUCKET_NAME environment variable not set." << std::endl;
+        return 1;
+    }
 }

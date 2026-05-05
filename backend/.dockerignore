@@ -1,0 +1,5 @@
+build/
+CMakeFiles/
+CMakeCache.txt
+vcpkg_installed/
+.vcpkg-root

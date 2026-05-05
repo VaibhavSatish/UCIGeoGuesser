@@ -12,12 +12,12 @@ import Guess from "../guess";
 import GameTimer from "../GameTimer";
 import GameOver from "../GameOver";
 
-
 // NOTE: We do not import react-leaflet at all here.
 
 export default function GameApp() {
-  /* Backend Url */
-  const backendUrl = "http://localhost:18080";
+  /* Backend URL */
+  const backendUrl =
+    process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:18080";
 
   /*Use States*/
   const [loading, setLoading] = useState<boolean>(true);
@@ -27,10 +27,8 @@ export default function GameApp() {
   const [isHovering, setIsHovering] = useState<boolean>(false);
   const [hasGuessed, setHasGuessed] = useState<boolean>(false);
 
-
   /*Map iframe ref*/
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
-  
 
   /*Round / timer*/
   const mapZoom = 14.5;
@@ -44,9 +42,9 @@ export default function GameApp() {
   const loadData = async () => {
     const nextRound = currRound + 1;
     console.log(nextRound);
-   
+
     // if (nextRound > maxRounds) {
-      
+
     //   console.log('gameIsOver');
     //   setGameOver(true);
     //   return;
@@ -69,20 +67,20 @@ export default function GameApp() {
     if (!allImages) {
       try {
         const res = await fetch(`${backendUrl}/images`, {
-          method: 'POST',
+          method: "POST",
           headers: {
-            'Content-Type': 'application/json'
+            "Content-Type": "application/json",
           },
-          body: JSON.stringify({totalRounds: maxRounds })
-        })
-  
+          body: JSON.stringify({ totalRounds: maxRounds }),
+        });
+
         if (!res.ok) {
-          const errData = await res.json().catch(() => null)
-          throw new Error(errData?.detail || `Server error: ${res.status}`)
+          const errData = await res.json().catch(() => null);
+          throw new Error(errData?.detail || `Server error: ${res.status}`);
         }
-  
-        const data = await res.json()
-  
+
+        const data = await res.json();
+
         allImages = data.images;
         await db.put("homeData", allImages, "allImages");
       } catch (err) {
@@ -119,14 +117,13 @@ export default function GameApp() {
   }, []);
 
   useEffect(() => {
-    console.log('procked')
+    console.log("procked");
     if (currRound >= maxRounds && hasGuessed) {
-      
-      console.log('gameIsOver');
+      console.log("gameIsOver");
       setGameOver(true);
       return;
     }
-  },[hasGuessed])
+  }, [hasGuessed]);
 
   /* Keyboard handlers (Space to lock/confirm guess, Enter to accept and go to next) */
   useEffect(() => {
@@ -211,8 +208,6 @@ export default function GameApp() {
     loadData();
   };
 
-  
-
   return (
     <div
       className="min-h-screen w-full relative transition-opacity duration-500"
@@ -245,10 +240,9 @@ export default function GameApp() {
                     {currRound}/{maxRounds}{" "}
                   </span>
                 </div>
-               
               </div>
             </div>
-            
+
             <div className="mt-2 text-white">
               {!gameOver && !hasGuessed ? (
                 <GameTimer
@@ -279,10 +273,12 @@ export default function GameApp() {
                 />
               ) : null}
             </div>
-           
+
             {hasGuessed && guessCoords && !gameOver && (
               <Results
-                onNextImage={() => {handleNextImageFromResults();}}
+                onNextImage={() => {
+                  handleNextImageFromResults();
+                }}
                 score={calculateScore(
                   guessCoords[0],
                   guessCoords[1],
@@ -294,13 +290,13 @@ export default function GameApp() {
           </div>
 
           {/* GameOver Stats*/}
-          {gameOver && 
-          <div className="items-center justify-center bg-gray-600/60 border-white h-32 w-64 rounded-md">
+          {gameOver && (
+            <div className="items-center justify-center bg-gray-600/60 border-white h-32 w-64 rounded-md">
               <div className="mt-2 text-white text-xl">
-                <GameOver finalScore={finalScore}/>
+                <GameOver finalScore={finalScore} />
               </div>
-          </div>}
-          
+            </div>
+          )}
 
           {/* iframe map in corner */}
           <div

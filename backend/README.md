@@ -6,11 +6,11 @@ Download Docker Desktop:
 
 After downloading docker desktop create a Docker image using the command below:
 
-`docker build -t ucigeoguesser .`
+`docker build -t ucigeoguesser --target builder .`
 
 Run the docker image to create a container
 
-`docker run -p 18080:18080 -d --name backend -v LOCAL_PATH_TO_BACKEND:/backend ucigeoguesser sleep infinity`
+`docker run -p 18080:18080 -d --name backend -v .:/backend ucigeoguesser sleep infinity`
 
 Execute the container 
 
