@@ -3,7 +3,7 @@
 
 import React, { useState, useEffect, useRef } from "react";
 import { openDB } from "idb";
-import "leaflet/dist/leaflet.css";
+// import "leaflet/dist/leaflet.css";
 
 import calculateScore from "../score"; // adjust if needed
 

@@ -29,15 +29,12 @@ RUN vcpkg/bootstrap-vcpkg.sh
 # Set the working directory
 WORKDIR /backend
 
+# Copy the vcpkg manifest file to the container
+COPY vcpkg.json .
 
 
 # Copy the source code into the container
 COPY . .
-
-
-# Create the manifest file automatically inside the container
-RUN vcpkg new --application --name backend || true && \
-    vcpkg add port crow asio 
 
 
 # Builds the Build Directory and Connects the CMakeLists.txt to the vcpkg toolchain file to ensure that the dependencies are correctly linked during the build process.
@@ -66,7 +63,7 @@ COPY .env .
 EXPOSE 18080
 
 # Run the app
-CMD ["./backend"]
+CMD ["./build/backend"]
 
 
 
