@@ -23,6 +23,10 @@ find_package(asio CONFIG REQUIRED)
 # Handle Threads (Crow usually requires Pthreads on Linux)
 find_package(Threads REQUIRED)
 
+find_package(google_cloud_cpp_storage REQUIRED)
+
+find_package(nlohmann_json REQUIRED)
+
 add_executable(server_connection server_connection.cpp)
 
 add_executable(upload_images upload_images.cpp)
@@ -39,8 +43,9 @@ target_link_libraries(server_connection PRIVATE
     Threads::Threads
 )
 
-
-
-target_include_directories(upload_images PRIVATE 
+target_include_directories(upload_images PUBLIC 
     ${laserpants_dotenv_SOURCE_DIR}/include
 )
+
+target_link_libraries(upload_images PUBLIC google-cloud-cpp::storage)
+

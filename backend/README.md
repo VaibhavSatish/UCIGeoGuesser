@@ -16,7 +16,7 @@ Execute the container
 
 `docker exec -it backend bash ` or `docker exec -it backend ./build/backend`
 
-# To Run CMake in Docker (Not Necessary Runned by Docker)
+# To Run CMake in Docker (Not Necessary If Runned by Docker)
 
 Initialize Build Directory:
 
@@ -25,3 +25,19 @@ Initialize Build Directory:
 Compile the build
 
 `cmake --build build `
+
+# To Authenticate Google Cloud
+
+Authenticate using google account login:
+
+`gcloud auth application-default login`
+
+# Recommendations
+
+We recommend you to utilize the Dev Container extension to manage the backend.
+
+![Dev Containers](misc/devcontainers.png)
+
+Once installed, `Cmd + Shift + P` or `Control + Shift + P` to enter command palette.
+
+Search `Attach to Running Container..` and select backend.

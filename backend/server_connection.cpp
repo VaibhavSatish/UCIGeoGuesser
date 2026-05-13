@@ -23,6 +23,7 @@ int main() {
         }
         
         int rounds  = data["totalRounds"].i();
+        cout << "Received request for " << rounds << " rounds." << endl;
         int id = 1;
 
         for (const auto& file : filesystem::directory_iterator("./res")) {
@@ -35,9 +36,9 @@ int main() {
             stringstream ss;
             ss << in.rdbuf();
 
-            res["images"][to_string(id++)]["image"] =
-                "data:image/jpeg;base64," +
-                crow::utility::base64encode(ss.str(), ss.str().size());
+            // res["images"][to_string(id++)]["image"] =
+            //     "data:image/jpeg;base64," +
+            //     crow::utility::base64encode(ss.str(), ss.str().size());
 
             ifstream into(file.path().string() + ".supplemental-metadata.json");
             stringstream sst;

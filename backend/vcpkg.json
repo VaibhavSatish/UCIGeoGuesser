@@ -2,6 +2,7 @@
   "name": "backend",
   "dependencies": [
     "crow",
-    "asio"
+    "asio",
+    {"name": "google-cloud-cpp", "default-features": false, "features": ["storage"]}
   ]
 }
