@@ -66,7 +66,7 @@ export default function GameApp() {
 
     if (!allImages) {
       try {
-        const res = await fetch(`${backendUrl}/images`, {
+        const res = await fetch(`${backendUrl}/post_images`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
@@ -80,6 +80,7 @@ export default function GameApp() {
         }
 
         const data = await res.json();
+        console.log("Fetched images from backend:", data);
 
         allImages = data.images;
         await db.put("homeData", allImages, "allImages");
@@ -96,9 +97,10 @@ export default function GameApp() {
     const randomKey = imageKeys[Math.floor(Math.random() * imageKeys.length)];
     const selected = allImages[randomKey];
     setImageSrc(selected.image);
+    const metadataObj = JSON.parse(selected.metadata);
     setLocationData([
-      selected.metadata.geoData.longitude,
-      selected.metadata.geoData.latitude,
+      metadataObj.longitude.toString(),
+      metadataObj.latitude.toString(),
     ]);
     setLoading(false);
 

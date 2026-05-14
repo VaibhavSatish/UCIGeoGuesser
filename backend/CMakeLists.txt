@@ -25,27 +25,27 @@ find_package(Threads REQUIRED)
 
 find_package(google_cloud_cpp_storage REQUIRED)
 
-find_package(nlohmann_json REQUIRED)
+find_package(nlohmann_json CONFIG REQUIRED)
 
 add_executable(server_connection server_connection.cpp)
-
-add_executable(upload_images upload_images.cpp)
 
 # Rename the binary to "backend" for clarity
 set_target_properties(server_connection PROPERTIES OUTPUT_NAME "backend")
 
 # Find Crow
-target_include_directories(server_connection PRIVATE ${CROW_INCLUDE_DIR})
+target_include_directories(server_connection PRIVATE 
+    ${CROW_INCLUDE_DIR}
+    ${laserpants_dotenv_SOURCE_DIR}/include
+)
 
 # 5. Link only actual libraries (Asio and Threads)
 target_link_libraries(server_connection PRIVATE 
     asio::asio 
     Threads::Threads
+    google-cloud-cpp::storage
+    nlohmann_json::nlohmann_json
 )
 
-target_include_directories(upload_images PUBLIC 
-    ${laserpants_dotenv_SOURCE_DIR}/include
-)
 
-target_link_libraries(upload_images PUBLIC google-cloud-cpp::storage)
+
 

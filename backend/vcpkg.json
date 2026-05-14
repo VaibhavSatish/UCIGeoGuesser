@@ -3,6 +3,7 @@
   "dependencies": [
     "crow",
     "asio",
-    {"name": "google-cloud-cpp", "default-features": false, "features": ["storage"]}
+    {"name": "google-cloud-cpp", "default-features": false, "features": ["storage"]},
+    "nlohmann-json"
   ]
 }
