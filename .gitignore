@@ -2,3 +2,9 @@
 bin
 next/
 node_modules/
+backend/build/
+backend/CMakeFiles/
+.DS_Store
+backend/.env
+backend/vcpkg_installed/
+backend/.vcpkg-root

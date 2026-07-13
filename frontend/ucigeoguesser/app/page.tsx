@@ -1,7 +1,9 @@
 // app/page.tsx
+'use client';
 import React from 'react';
-import GameApp from './gameapp';
+import TitleScreen from "./TitleScreen";
+import { redirect } from 'next/navigation';
 
-export default function Page() {
-  return <GameApp />;
+export default function Page() { 
+  return <TitleScreen onStart={() => redirect('/game')} />;
 }
