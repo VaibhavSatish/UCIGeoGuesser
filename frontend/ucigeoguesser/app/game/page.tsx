@@ -16,8 +16,7 @@ import GameOver from "../GameOver";
 
 export default function GameApp() {
   /* Backend URL */
-  const backendUrl =
-    process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:18080";
+  const backendUrl = "http://0.0.0.0:18080";
 
   /*Use States*/
   const [loading, setLoading] = useState<boolean>(true);
