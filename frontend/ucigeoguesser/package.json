@@ -13,7 +13,6 @@
   },
   "dependencies": {
     "gh-pages": "^6.3.0",
-    "idb": "^8.0.2",
     "leaflet": "^1.9.4",
     "leaflet-defaulticon-compatibility": "^0.1.2",
     "next": "15.3.8",
