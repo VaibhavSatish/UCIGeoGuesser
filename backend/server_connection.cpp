@@ -85,6 +85,20 @@ int main() {
     cout << "Server starting with " << g_image_index.size() << " indexed & uploaded images." << endl;
 
     /* ───────────────────────────────────────
+       GET /api/health_check
+       Response: { "status" }
+       ─────────────────────────────────────── */
+    CROW_ROUTE(app, "/api/health_check").methods("GET"_method)
+    ([]() {
+
+        crow::json::wvalue res;
+        res["status"] = "ok";
+        return crow::response(200, res);
+        
+    });
+
+
+    /* ───────────────────────────────────────
        POST /api/start_game
        Request:  { "totalRounds": 5 }
        Response: { "sessionId", "totalRounds", "round", "imageUrl" }
