@@ -8,3 +8,4 @@ backend/CMakeFiles/
 backend/.env
 backend/vcpkg_installed/
 backend/.vcpkg-root
+backend/_deps
