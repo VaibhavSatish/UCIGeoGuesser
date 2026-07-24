@@ -83,6 +83,7 @@ WORKDIR /backend
 # "backend" executable, so the old second COPY line here referenced a file
 # that never existed and would have failed the build.
 COPY --from=builder /backend/build/backend .
+COPY --from=builder /backend/res .
 
 EXPOSE 18080
 
