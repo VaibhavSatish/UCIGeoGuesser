@@ -8,7 +8,6 @@
 #include <nlohmann/json.hpp>
 
 using namespace std;
-namespace gcs = ::google::cloud::storage;
 using json = nlohmann::json;
 
 // ──────────────────────────────────────────────
@@ -43,21 +42,56 @@ struct GameSession {
 };
 
 // ──────────────────────────────────────────────
+// GCS client (talks directly to the GCS JSON REST API over libcurl,
+// instead of linking the google-cloud-cpp SDK — which drags in gRPC,
+// protobuf, and Abseil, and was responsible for most of the build's size
+// and memory footprint). Auth is a standard OAuth2 service-account JWT
+// exchange, signed with OpenSSL.
+// ──────────────────────────────────────────────
+
+class GcsClient {
+public:
+    // Loads the service account key from the file at
+    // GOOGLE_APPLICATION_CREDENTIALS. Exits with an error if unset/unreadable.
+    GcsClient();
+
+    // Uploads a local file to the bucket. Returns the public object URL on
+    // success, or an empty string on failure.
+    string UploadFile(const string& bucket, const string& object_name,
+                       const string& file_path, const string& content_type);
+
+    // Deletes an object from the bucket. Returns true on success.
+    bool DeleteObject(const string& bucket, const string& object_name);
+
+private:
+    string client_email_;
+    string private_key_pem_;
+    string token_uri_;
+
+    string cached_token_;
+    chrono::system_clock::time_point token_expiry_;
+
+    // Returns a valid bearer token, refreshing it if it's missing or about
+    // to expire.
+    string GetAccessToken();
+};
+
+// ──────────────────────────────────────────────
 // GCS helpers (existing)
 // ──────────────────────────────────────────────
 
 const char* initialize_bucket();
-gcs::Client initialize_gcs();
+GcsClient initialize_gcs();
 
-const string write_to_bucket(gcs::Client client, const string& bucket_name,
+const string write_to_bucket(GcsClient& client, const string& bucket_name,
                              const string& path, const string& object_name);
 
 vector<unordered_map<string, string>> load_images_to_bucket(
-  gcs::Client client, const string& directory, const string& bucket_name,
+  GcsClient& client, const string& directory, const string& bucket_name,
   const string& metadata, int capacity
 );
 
-void delete_objects_from_bucket(gcs::Client client, const string& bucket_name,
+void delete_objects_from_bucket(GcsClient& client, const string& bucket_name,
                                 const vector<string>& object_names);
 
 // ──────────────────────────────────────────────
@@ -66,7 +100,7 @@ void delete_objects_from_bucket(gcs::Client client, const string& bucket_name,
 
 // Scan res/ directory, upload images to GCS, and build an index of all available images.
 // Reads each .supplemental-metadata.json file for coordinates.
-vector<ImageEntry> load_image_index(gcs::Client client,
+vector<ImageEntry> load_image_index(GcsClient& client,
                                     const string& bucket_name,
                                     const string& directory,
                                     const string& metadata_suffix);

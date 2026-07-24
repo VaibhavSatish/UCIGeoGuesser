@@ -7,12 +7,292 @@
 #include <sstream>
 #include <iomanip>
 #include <fstream>
+#include <curl/curl.h>
+#include <openssl/evp.h>
+#include <openssl/pem.h>
+#include <openssl/bio.h>
 #include "laserpants/dotenv/dotenv.h"
-#include "google/cloud/storage/client.h"
-#include "google/cloud/common_options.h"
 #include "upload_images.hpp"
 #include <nlohmann/json.hpp>
 #include <vector>
+
+// ──────────────────────────────────────────────
+// Small HTTP + crypto helpers backing GcsClient
+// ──────────────────────────────────────────────
+
+namespace {
+
+size_t curl_write_cb(void* contents, size_t size, size_t nmemb, void* userp) {
+    static_cast<string*>(userp)->append(static_cast<char*>(contents), size * nmemb);
+    return size * nmemb;
+}
+
+// Standard base64, then made URL-safe (RFC 4648 §5) with padding stripped,
+// as required for JWTs.
+string base64url_encode(const unsigned char* data, size_t len) {
+    int out_len = 4 * ((static_cast<int>(len) + 2) / 3);
+    string encoded(out_len, '\0');
+    int actual_len = EVP_EncodeBlock(reinterpret_cast<unsigned char*>(&encoded[0]), data, static_cast<int>(len));
+    encoded.resize(actual_len);
+    for (auto& c : encoded) {
+        if (c == '+') c = '-';
+        else if (c == '/') c = '_';
+    }
+    while (!encoded.empty() && encoded.back() == '=') {
+        encoded.pop_back();
+    }
+    return encoded;
+}
+
+string base64url_encode(const string& s) {
+    return base64url_encode(reinterpret_cast<const unsigned char*>(s.data()), s.size());
+}
+
+// Signs `data` with the RSA private key (PEM, PKCS#1/PKCS#8) using RS256.
+string rsa_sha256_sign(const string& private_key_pem, const string& data) {
+    BIO* bio = BIO_new_mem_buf(private_key_pem.data(), static_cast<int>(private_key_pem.size()));
+    EVP_PKEY* pkey = PEM_read_bio_PrivateKey(bio, nullptr, nullptr, nullptr);
+    BIO_free(bio);
+    if (!pkey) {
+        cerr << "Error: failed to parse service account private key." << endl;
+        return "";
+    }
+
+    EVP_MD_CTX* ctx = EVP_MD_CTX_new();
+    string signature;
+    if (EVP_DigestSignInit(ctx, nullptr, EVP_sha256(), nullptr, pkey) == 1) {
+        size_t sig_len = 0;
+        EVP_DigestSignUpdate(ctx, data.data(), data.size());
+        EVP_DigestSignFinal(ctx, nullptr, &sig_len);
+        signature.resize(sig_len);
+        if (EVP_DigestSignFinal(ctx, reinterpret_cast<unsigned char*>(&signature[0]), &sig_len) == 1) {
+            signature.resize(sig_len);
+        } else {
+            signature.clear();
+        }
+    }
+    EVP_MD_CTX_free(ctx);
+    EVP_PKEY_free(pkey);
+    return signature;
+}
+
+// Generic HTTP request. `body` may be empty (used for GET/DELETE).
+string http_request(const string& method, const string& url, const string& body,
+                     const vector<string>& headers, long* out_status = nullptr) {
+    CURL* curl = curl_easy_init();
+    string response;
+    if (!curl) return response;
+
+    struct curl_slist* header_list = nullptr;
+    for (const auto& h : headers) {
+        header_list = curl_slist_append(header_list, h.c_str());
+    }
+
+    curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
+    curl_easy_setopt(curl, CURLOPT_HTTPHEADER, header_list);
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, curl_write_cb);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &response);
+    curl_easy_setopt(curl, CURLOPT_CUSTOMREQUEST, method.c_str());
+    if (!body.empty()) {
+        curl_easy_setopt(curl, CURLOPT_POSTFIELDS, body.data());
+        curl_easy_setopt(curl, CURLOPT_POSTFIELDSIZE, static_cast<long>(body.size()));
+    }
+
+    CURLcode res = curl_easy_perform(curl);
+    long status = 0;
+    curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &status);
+    if (out_status) *out_status = status;
+    if (res != CURLE_OK) {
+        cerr << "HTTP request failed: " << curl_easy_strerror(res) << endl;
+        response.clear();
+    }
+
+    curl_slist_free_all(header_list);
+    curl_easy_cleanup(curl);
+    return response;
+}
+
+// Uploads raw bytes with a PUT/POST body from a file, needed for image
+// uploads (kept separate from http_request since it streams from disk
+// instead of building the whole body as a string first).
+string http_upload_file(const string& url, const string& file_path,
+                        const vector<string>& headers, long* out_status = nullptr) {
+    CURL* curl = curl_easy_init();
+    string response;
+    if (!curl) return response;
+
+    FILE* fp = fopen(file_path.c_str(), "rb");
+    if (!fp) {
+        cerr << "Error: could not open file for upload: " << file_path << endl;
+        curl_easy_cleanup(curl);
+        return response;
+    }
+
+    struct curl_slist* header_list = nullptr;
+    for (const auto& h : headers) {
+        header_list = curl_slist_append(header_list, h.c_str());
+    }
+
+    curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
+    curl_easy_setopt(curl, CURLOPT_HTTPHEADER, header_list);
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, curl_write_cb);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &response);
+    curl_easy_setopt(curl, CURLOPT_UPLOAD, 1L);
+    curl_easy_setopt(curl, CURLOPT_CUSTOMREQUEST, "POST");
+    curl_easy_setopt(curl, CURLOPT_READDATA, fp);
+
+    auto file_size = filesystem::file_size(file_path);
+    curl_easy_setopt(curl, CURLOPT_INFILESIZE_LARGE, static_cast<curl_off_t>(file_size));
+
+    CURLcode res = curl_easy_perform(curl);
+    long status = 0;
+    curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &status);
+    if (out_status) *out_status = status;
+    if (res != CURLE_OK) {
+        cerr << "HTTP upload failed: " << curl_easy_strerror(res) << endl;
+        response.clear();
+    }
+
+    fclose(fp);
+    curl_slist_free_all(header_list);
+    curl_easy_cleanup(curl);
+    return response;
+}
+
+} // namespace
+
+// ──────────────────────────────────────────────
+// GcsClient
+// ──────────────────────────────────────────────
+
+GcsClient::GcsClient() : token_uri_("https://oauth2.googleapis.com/token") {
+    const char* cred_path = getenv("GOOGLE_APPLICATION_CREDENTIALS");
+    if (cred_path == nullptr) {
+        cerr << "Error: GOOGLE_APPLICATION_CREDENTIALS environment variable not set." << endl;
+        exit(EXIT_FAILURE);
+    }
+
+    ifstream cred_file(cred_path);
+    if (!cred_file) {
+        cerr << "Error: could not open service account key file at " << cred_path << endl;
+        exit(EXIT_FAILURE);
+    }
+
+    json cred_json = json::parse(cred_file);
+    client_email_ = cred_json.value("client_email", "");
+    private_key_pem_ = cred_json.value("private_key", "");
+    if (cred_json.contains("token_uri")) {
+        token_uri_ = cred_json["token_uri"].get<string>();
+    }
+
+    if (client_email_.empty() || private_key_pem_.empty()) {
+        cerr << "Error: service account key file is missing client_email/private_key." << endl;
+        exit(EXIT_FAILURE);
+    }
+}
+
+string GcsClient::GetAccessToken() {
+    auto now = chrono::system_clock::now();
+    // Refresh a little early (60s buffer) rather than right at expiry.
+    if (!cached_token_.empty() && now < (token_expiry_ - chrono::seconds(60))) {
+        return cached_token_;
+    }
+
+    long iat = chrono::duration_cast<chrono::seconds>(now.time_since_epoch()).count();
+    long exp = iat + 3600;
+
+    json header = {{"alg", "RS256"}, {"typ", "JWT"}};
+    json claims = {
+        {"iss", client_email_},
+        {"scope", "https://www.googleapis.com/auth/devstorage.read_write"},
+        {"aud", token_uri_},
+        {"iat", iat},
+        {"exp", exp}
+    };
+
+    string signing_input = base64url_encode(header.dump()) + "." + base64url_encode(claims.dump());
+    string signature = rsa_sha256_sign(private_key_pem_, signing_input);
+    if (signature.empty()) {
+        cerr << "Error: failed to sign JWT for GCS auth." << endl;
+        return "";
+    }
+    string jwt = signing_input + "." + base64url_encode(signature);
+
+    string body = "grant_type=urn%3Aietf%3Aparams%3Aoauth%3Agrant-type%3Ajwt-bearer&assertion=" + jwt;
+    long status = 0;
+    string response = http_request("POST", token_uri_, body,
+                                    {"Content-Type: application/x-www-form-urlencoded"}, &status);
+
+    if (status != 200 || response.empty()) {
+        cerr << "Error: token exchange failed (HTTP " << status << "): " << response << endl;
+        return "";
+    }
+
+    try {
+        json token_json = json::parse(response);
+        cached_token_ = token_json["access_token"].get<string>();
+        long expires_in = token_json.value("expires_in", 3600);
+        token_expiry_ = now + chrono::seconds(expires_in);
+    } catch (const std::exception& e) {
+        cerr << "Error parsing token response: " << e.what() << endl;
+        return "";
+    }
+
+    return cached_token_;
+}
+
+string GcsClient::UploadFile(const string& bucket, const string& object_name,
+                             const string& file_path, const string& content_type) {
+    string token = GetAccessToken();
+    if (token.empty()) return "";
+
+    CURL* curl_for_escape = curl_easy_init();
+    char* escaped = curl_easy_escape(curl_for_escape, object_name.c_str(), 0);
+    string escaped_name(escaped);
+    curl_free(escaped);
+    curl_easy_cleanup(curl_for_escape);
+
+    string url = "https://storage.googleapis.com/upload/storage/v1/b/" + bucket +
+                 "/o?uploadType=media&name=" + escaped_name;
+
+    vector<string> headers = {
+        "Authorization: Bearer " + token,
+        "Content-Type: " + content_type
+    };
+
+    long status = 0;
+    string response = http_upload_file(url, file_path, headers, &status);
+    if (status < 200 || status >= 300) {
+        cerr << "Error uploading file " << file_path << " (HTTP " << status << "): " << response << endl;
+        return "";
+    }
+
+    // Set contentDisposition:inline to match the previous SDK behavior
+    // (browsers display the image instead of downloading it).
+    string patch_url = "https://storage.googleapis.com/storage/v1/b/" + bucket + "/o/" + escaped_name;
+    json patch_body = {{"contentDisposition", "inline"}};
+    http_request("PATCH", patch_url, patch_body.dump(),
+                 {"Authorization: Bearer " + token, "Content-Type: application/json"});
+
+    return "https://storage.googleapis.com/" + bucket + "/" + object_name;
+}
+
+bool GcsClient::DeleteObject(const string& bucket, const string& object_name) {
+    string token = GetAccessToken();
+    if (token.empty()) return false;
+
+    CURL* curl_for_escape = curl_easy_init();
+    char* escaped = curl_easy_escape(curl_for_escape, object_name.c_str(), 0);
+    string escaped_name(escaped);
+    curl_free(escaped);
+    curl_easy_cleanup(curl_for_escape);
+
+    string url = "https://storage.googleapis.com/storage/v1/b/" + bucket + "/o/" + escaped_name;
+    long status = 0;
+    string response = http_request("DELETE", url, "", {"Authorization: Bearer " + token}, &status);
+
+    return status >= 200 && status < 300;
+}
 
 // ──────────────────────────────────────────────
 // GCS helpers (existing, unchanged)
@@ -28,31 +308,24 @@ const char* initialize_bucket() {
     return bucket_env;
 }
 
-gcs::Client initialize_gcs() {
-    auto options = google::cloud::Options{};
-    auto const* ca_bundle = std::getenv("CURL_CA_BUNDLE");
-    if (ca_bundle != nullptr) {
-        options.set<google::cloud::CARootsFilePathOption>(ca_bundle);
-    }
-    auto client = gcs::Client(options);
-    return client;
+GcsClient initialize_gcs() {
+    dotenv::init();
+    return GcsClient();
 }
 
-const string write_to_bucket(gcs::Client client, const string& bucket_name, const string& path, const string& object_name) {
+const string write_to_bucket(GcsClient& client, const string& bucket_name, const string& path, const string& object_name) {
     cout << "Uploading file: " << path << " to bucket: " << bucket_name << " with object name: " << object_name << endl;
-    auto object_metadata = client.UploadFile(path, bucket_name, object_name, gcs::ContentType("image/jpeg"), gcs::WithObjectMetadata(gcs::ObjectMetadata().set_content_disposition("inline")));
-    cout << "Upload response received for file: " << path << endl;
-    if (!object_metadata) {
-        cerr << "Error uploading file: " << object_metadata.status() << endl;
+    string object_link = client.UploadFile(bucket_name, object_name, path, "image/jpeg");
+    if (object_link.empty()) {
+        cerr << "Error uploading file: " << path << endl;
     } else {
-        cout << "File uploaded successfully: " << object_metadata->name() << endl;
+        cout << "File uploaded successfully: " << object_name << endl;
     }
-    string object_link = "https://storage.googleapis.com/" + bucket_name + "/" + object_name;
     cout << "Object link: " << object_link << endl;
     return object_link;
 }
 
-vector<unordered_map<string, string>> load_images_to_bucket(gcs::Client client, const string& directory, const string& bucket_name, const string& metadata, int capacity) {
+vector<unordered_map<string, string>> load_images_to_bucket(GcsClient& client, const string& directory, const string& bucket_name, const string& metadata, int capacity) {
     vector<unordered_map<string, string>> images;
     if (capacity <= 0) {
         cerr << "Capacity must be greater than 0." << endl;
@@ -79,12 +352,12 @@ vector<unordered_map<string, string>> load_images_to_bucket(gcs::Client client, 
     return images;
 }
 
-void delete_objects_from_bucket(gcs::Client client, const string& bucket_name, const vector<string>& object_names) {
+void delete_objects_from_bucket(GcsClient& client, const string& bucket_name, const vector<string>& object_names) {
     for (const auto& object_name : object_names) {
         cout << "Deleting object: " << object_name << " from bucket: " << bucket_name << endl;
-        auto status = client.DeleteObject(bucket_name, object_name);
-        if (!status.ok()) {
-            cerr << "Error deleting object: " << status << endl;
+        bool ok = client.DeleteObject(bucket_name, object_name);
+        if (!ok) {
+            cerr << "Error deleting object: " << object_name << endl;
         } else {
             cout << "Object deleted successfully: " << object_name << endl;
         }
@@ -95,7 +368,7 @@ void delete_objects_from_bucket(gcs::Client client, const string& bucket_name, c
 // Game logic (new)
 // ──────────────────────────────────────────────
 
-vector<ImageEntry> load_image_index(gcs::Client client,
+vector<ImageEntry> load_image_index(GcsClient& client,
                                     const string& bucket_name,
                                     const string& directory,
                                     const string& metadata_suffix) {

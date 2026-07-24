@@ -3,7 +3,8 @@
   "dependencies": [
     "crow",
     "asio",
-    {"name": "google-cloud-cpp", "default-features": false, "features": ["storage"]},
+    "curl",
+    "openssl",
     "nlohmann-json"
   ]
 }

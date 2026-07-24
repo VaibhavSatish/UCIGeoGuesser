@@ -35,7 +35,11 @@ find_package(asio CONFIG REQUIRED)
 # Handle Threads (Crow usually requires Pthreads on Linux)
 find_package(Threads REQUIRED)
 
-find_package(google_cloud_cpp_storage REQUIRED)
+# Used for direct GCS REST API calls (see upload_images.cpp) instead of the
+# google-cloud-cpp SDK, which pulled in gRPC + protobuf + Abseil and was the
+# main driver of build memory/time and final binary size.
+find_package(CURL REQUIRED)
+find_package(OpenSSL REQUIRED)
 
 find_package(nlohmann_json CONFIG REQUIRED)
 
@@ -54,10 +58,8 @@ target_include_directories(server_connection PRIVATE
 target_link_libraries(server_connection PRIVATE 
     asio::asio 
     Threads::Threads
-    google-cloud-cpp::storage
+    CURL::libcurl
+    OpenSSL::SSL
+    OpenSSL::Crypto
     nlohmann_json::nlohmann_json
 )
-
-
-
-

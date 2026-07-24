@@ -9,12 +9,12 @@
 # (correct for both amd64 and arm64 builds, as long as you're not trying to
 # cross-build one from the other).
 FROM ubuntu:22.04 AS builder
- 
+
 ARG TARGETARCH
- 
+
 ENV VCPKG_ROOT=/vcpkg
 ENV PATH="${VCPKG_ROOT}:${PATH}"
- 
+
 # Install essential packages for compiling C++ code
 RUN apt-get update && apt-get install -y \
     build-essential \
@@ -26,29 +26,29 @@ RUN apt-get update && apt-get install -y \
     tar \
     pkg-config \
     && rm -rf /var/lib/apt/lists/*
- 
- 
- 
+
+
+
 # Install vcpkg package manager (for crow and asio)
 RUN git clone https://github.com/microsoft/vcpkg /vcpkg
 RUN vcpkg/bootstrap-vcpkg.sh
- 
+
 # NOTE: the google-cloud-sdk / gcloud CLI install was removed here. The app
 # talks to Cloud Storage via the google-cloud-cpp *library* (linked in via
 # vcpkg + CMake), so the CLI tool was never actually used at build or run
 # time — it was just adding ~1-2GB of dead weight to the builder stage.
- 
+
 # Set the working directory
 WORKDIR /backend
- 
+
 # Copy the vcpkg manifest file to the container
 COPY vcpkg.json .
- 
- 
+
+
 # Copy the source code into the container
 COPY . .
- 
- 
+
+
 # Builds the Build Directory and Connects the CMakeLists.txt to the vcpkg toolchain file to ensure that the dependencies are correctly linked during the build process.
 # VCPKG_OVERLAY_TRIPLETS + VCPKG_TARGET_TRIPLET point at a custom triplet
 # that skips building the unused debug configuration of every dependency
@@ -63,19 +63,19 @@ RUN VCPKG_TRIPLET=$( [ "$TARGETARCH" = "arm64" ] && echo "arm64-linux-release" |
     -DVCPKG_TARGET_TRIPLET=${VCPKG_TRIPLET} \
     -DCMAKE_BUILD_TYPE=Release
     
- 
+
 # Compile the code. "-j2" caps parallel compile jobs — gRPC/protobuf
 # translation units can each need 1-2GB+ of RAM, so letting CMake spawn one
 # job per core is what actually triggers the OOM on memory-constrained
 # build hosts. Lower to -j1 if this still runs out of memory.
 RUN cmake --build build -- -j2
- 
+
 # Exposing the port that the server will run on
 EXPOSE 18080
- 
+
 # STAGE 2: Creates tiny image with only the compiled binary
 FROM ubuntu:22.04
- 
+
 WORKDIR /backend
 # Copy from /backend/build (matching Stage 1 WORKDIR).
 # NOTE: there is no separate "upload_images" binary — upload_images.cpp is
@@ -83,10 +83,8 @@ WORKDIR /backend
 # "backend" executable, so the old second COPY line here referenced a file
 # that never existed and would have failed the build.
 COPY --from=builder /backend/build/backend .
- 
+
 EXPOSE 18080
- 
+
 # Run the app (binary lands flat in /backend, not /backend/build)
 CMD ["./backend"]
-
-
