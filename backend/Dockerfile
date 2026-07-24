@@ -1,8 +1,16 @@
-
- 
- 
 # Stage 1: Build stage
-FROM --platform=$BUILDPLATFORM ubuntu:22.04 AS builder
+# NOTE: previously pinned to --platform=$BUILDPLATFORM. That pattern only
+# makes sense if you also set up a real cross-compilation toolchain (a
+# separate C/C++ cross-compiler + cross vcpkg triplet). Since this project
+# doesn't do that, keeping $BUILDPLATFORM here while the final stage follows
+# whatever target platform was requested would silently link a binary built
+# for the host arch into a base image of a different arch. Removed so the
+# builder just compiles natively for whatever platform is requested
+# (correct for both amd64 and arm64 builds, as long as you're not trying to
+# cross-build one from the other).
+FROM ubuntu:22.04 AS builder
+ 
+ARG TARGETARCH
  
 ENV VCPKG_ROOT=/vcpkg
 ENV PATH="${VCPKG_ROOT}:${PATH}"
@@ -42,15 +50,25 @@ COPY . .
  
  
 # Builds the Build Directory and Connects the CMakeLists.txt to the vcpkg toolchain file to ensure that the dependencies are correctly linked during the build process.
-RUN cmake -B build -S . \
+# VCPKG_OVERLAY_TRIPLETS + VCPKG_TARGET_TRIPLET point at a custom triplet
+# that skips building the unused debug configuration of every dependency
+# (see triplets/*.cmake), which roughly halves peak memory during the
+# vcpkg install step. TARGETARCH ("amd64" or "arm64") picks the right one.
+RUN VCPKG_TRIPLET=$( [ "$TARGETARCH" = "arm64" ] && echo "arm64-linux-release" || echo "x64-linux-release" ) && \
+    cmake -B build -S . \
     -DCMAKE_TOOLCHAIN_FILE=/vcpkg/scripts/buildsystems/vcpkg.cmake \
     -DVCPKG_MANIFEST_MODE=ON \
     -DVCPKG_ROOT=/vcpkg \
+    -DVCPKG_OVERLAY_TRIPLETS=/backend/triplets \
+    -DVCPKG_TARGET_TRIPLET=${VCPKG_TRIPLET} \
     -DCMAKE_BUILD_TYPE=Release
     
  
-# Compile the code
-RUN cmake --build build
+# Compile the code. "-j2" caps parallel compile jobs — gRPC/protobuf
+# translation units can each need 1-2GB+ of RAM, so letting CMake spawn one
+# job per core is what actually triggers the OOM on memory-constrained
+# build hosts. Lower to -j1 if this still runs out of memory.
+RUN cmake --build build -- -j2
  
 # Exposing the port that the server will run on
 EXPOSE 18080
