@@ -60,7 +60,6 @@ WORKDIR /backend
 # Copy from /backend/build (matching Stage 1 WORKDIR)
 COPY --from=builder /backend/build/backend .
 COPY --from=builder /backend/build/upload_images .
-COPY .env . 
 
 EXPOSE 18080
 
