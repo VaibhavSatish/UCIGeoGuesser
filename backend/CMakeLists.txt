@@ -5,6 +5,18 @@ project(backend)
 
 set(CMAKE_CXX_STANDARD 17)
 
+# Strip debug symbols from Release binaries. Because this project statically
+# links vcpkg's static triplet (gRPC + protobuf + Abseil + OpenSSL via
+# google-cloud-cpp), unstripped binaries can balloon into multiple GB each.
+# "-s" tells the linker to omit the symbol table, shrinking the executables
+# dramatically without touching how they run.
+if(NOT CMAKE_BUILD_TYPE)
+    set(CMAKE_BUILD_TYPE Release)
+endif()
+if(CMAKE_BUILD_TYPE STREQUAL "Release")
+    set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -s")
+endif()
+
 # Include dotenv-cpp using FetchContent
 include(FetchContent)
 FetchContent_Declare(
