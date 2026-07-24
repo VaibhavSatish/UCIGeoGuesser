@@ -83,7 +83,11 @@ WORKDIR /backend
 # "backend" executable, so the old second COPY line here referenced a file
 # that never existed and would have failed the build.
 COPY --from=builder /backend/build/backend .
-COPY --from=builder /backend/res .
+# NOTE: destination is ./res (not just "."), so the images land in a real
+# res/ subfolder — matching IMAGE_DIRECTORY = "./res" in server_connection.cpp.
+# Copying with just "." as the destination would dump the jpgs flat into
+# /backend and the app would find zero images at startup.
+COPY --from=builder /backend/res ./res
 
 EXPOSE 18080
 
