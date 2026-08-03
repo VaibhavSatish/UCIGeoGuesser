@@ -9,7 +9,7 @@ import GameOver from "../GameOver";
 
 export default function GameApp() {
   /* Backend URL */
-  const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL;
+  const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'https://henchman-crunching-golf.ngrok-free.dev';
 
   /* Health & Connection States */
   const [isServerHealthy, setIsServerHealthy] = useState<boolean | null>(null);
@@ -49,9 +49,13 @@ export default function GameApp() {
   /* Health Check ping to backend */
   const checkServerHealth = async (): Promise<boolean> => {
     try {
+      console.log(`${backendUrl}/api/health_check`);
       const res = await fetch(`${backendUrl}/api/health_check`, {
         method: "GET",
         signal: AbortSignal.timeout(4000), // Timeout after 4s
+        headers: {
+    'ngrok-skip-browser-warning': 'true',
+        },
       });
 
       if (!res.ok) throw new Error(`Health check returned status ${res.status}`);

@@ -64,8 +64,8 @@ int main() {
     crow::App<crow::CORSHandler> app;
     auto& cors = app.get_middleware<crow::CORSHandler>().global();
     cors.origin("*")
-        .methods("POST"_method, "OPTIONS"_method)
-        .headers("Content-Type");
+        .methods("GET"_method, "POST"_method, "OPTIONS"_method)
+        .headers("Content-Type", "ngrok-skip-browser-warning");
 
     /* Constants */
     const string IMAGE_DIRECTORY = "./res";
