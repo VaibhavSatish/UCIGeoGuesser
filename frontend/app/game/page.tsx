@@ -9,7 +9,7 @@ import GameOver from "../GameOver";
 
 export default function GameApp() {
   /* Backend URL */
-  const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'https://henchman-crunching-golf.ngrok-free.dev';
+  const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL;
 
   /* Health & Connection States */
   const [isServerHealthy, setIsServerHealthy] = useState<boolean | null>(null);
