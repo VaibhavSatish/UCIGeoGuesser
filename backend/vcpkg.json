@@ -1,0 +1,10 @@
+{
+  "name": "backend",
+  "dependencies": [
+    "crow",
+    "asio",
+    "curl",
+    "openssl",
+    "nlohmann-json"
+  ]
+}
