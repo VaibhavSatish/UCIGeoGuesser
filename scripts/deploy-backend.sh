@@ -1,11 +1,13 @@
+
+
+cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" || exit 1
+cd ../backend 
 echo "Stopping and removing existing backend Docker container..."
 sudo docker stop backend
 sudo docker rm backend
 sudo docker rmi ucigeoguesser
 echo "Building Docker image..."
-cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" || exit 1
-cd ../backend 
-sudo docker build -t ucigeoguesser .
+sudo docker build -t ucigeoguesser . || exit 1
 echo "Building Docker container..."
 sudo docker run -d \
   --name backend \
