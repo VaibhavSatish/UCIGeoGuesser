@@ -20,5 +20,5 @@ jobs:
             git pull origin main 
             chmod +x ./scripts/deploy-backend.sh
             sudo ./scripts/deploy-backend.sh
-          EOF          
+            EOF          
         shell: bash
