@@ -1,16 +1,20 @@
-echo "Building Docker image..."
+
+
 cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" || exit 1
 cd ../backend 
-sudo docker build -t ucigeoguesser .
-echo "Building Docker container..."
+echo "Stopping and removing existing backend Docker container..."
 sudo docker stop backend
 sudo docker rm backend
+sudo docker rmi ucigeoguesser
+echo "Building Docker image..."
+sudo docker build -t ucigeoguesser . || exit 1
+echo "Building Docker container..."
 sudo docker run -d \
   --name backend \
   --restart unless-stopped \
   -p 18080:18080 \
   -v ~/ucigeoguesser/backend/key-file.json:/backend/key-file.json:ro \
   -e GOOGLE_APPLICATION_CREDENTIALS="/backend/key-file.json" \
-  --env-file .env \
+  --env-file ~/ucigeoguesser/backend/.env \
   ucigeoguesser
 echo "Successfully deployed backend Docker container."
