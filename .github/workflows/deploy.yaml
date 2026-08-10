@@ -17,8 +17,8 @@ jobs:
         run: |
           ssh -o StrictHostKeyChecking=no ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} << 'EOF'
             cd ucigeoguesser
+            git clean -fd
             git pull origin main 
-            chmod +x ./scripts/deploy-backend.sh
             sudo ./scripts/deploy-backend.sh
             EOF          
         shell: bash
