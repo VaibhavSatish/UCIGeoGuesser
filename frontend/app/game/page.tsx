@@ -9,7 +9,7 @@ import GameOver from "../GameOver";
 
 export default function GameApp() {
   /* Backend URL */
-  const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL;
+  const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:18080";
 
   /* Health & Connection States */
   const [isServerHealthy, setIsServerHealthy] = useState<boolean | null>(null);
