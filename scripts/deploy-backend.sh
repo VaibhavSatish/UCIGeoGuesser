@@ -12,8 +12,8 @@ sudo docker run -d \
   --name backend \
   --restart unless-stopped \
   -p 18080:18080 \
-  -v ~/ucigeoguesser/backend/key-file.json:/backend/key-file.json:ro \
+  -v key-file.json:/backend/key-file.json:ro \
   -e GOOGLE_APPLICATION_CREDENTIALS="/backend/key-file.json" \
-  --env-file ~/ucigeoguesser/backend/.env \
+  --env-file .env \
   ucigeoguesser
 echo "Successfully deployed backend Docker container."
