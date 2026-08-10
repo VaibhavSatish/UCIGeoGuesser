@@ -1,11 +1,6 @@
 --
--- PostgreSQL database dump
+-- PostgreSQL database dump (Corrected)
 --
-
-\restrict d6LfLHgMvWLWyL0VHElM1lHCToTk0dmkTQcvgYXy4tIWo3QbCPWfTos2BPqMUfa
-
--- Dumped from database version 18.4 (Homebrew)
--- Dumped by pg_dump version 18.4 (Homebrew)
 
 SET statement_timeout = 0;
 SET lock_timeout = 0;
@@ -20,66 +15,41 @@ SET client_min_messages = warning;
 SET row_security = off;
 
 SET default_tablespace = '';
-
 SET default_table_access_method = heap;
 
---
--- Name: player; Type: TABLE; Schema: public; Owner: -
---
+-- Drop tables safely in reverse order of dependencies
+DROP TABLE IF EXISTS public.challenge_images CASCADE;
+DROP TABLE IF EXISTS public.challenges CASCADE;
+DROP TABLE IF EXISTS public.players CASCADE;
+DROP TABLE IF EXISTS public.player CASCADE;
 
-IF NOT EXISTS CREATE TABLE public.player (
-    id integer NOT NULL,
-    username character varying(50) NOT NULL,
-    email character varying(100) NOT NULL
+-- 1. Users/Players table
+CREATE TABLE IF NOT EXISTS public.players (
+    id SERIAL PRIMARY KEY,
+    username VARCHAR(50) NOT NULL,
+    email VARCHAR(255) UNIQUE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+-- 2. Challenges table (Generates the unique challenge)
+CREATE TABLE IF NOT EXISTS public.challenges (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(), -- Secure, unguessable ID for the link
+    creator_id INT REFERENCES public.players(id) ON DELETE SET NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
 
---
--- Name: player_id_seq; Type: SEQUENCE; Schema: public; Owner: -
---
+-- 3. Challenge Images table (Maps multiple images to one challenge)
+CREATE TABLE IF NOT EXISTS public.challenge_images (
+    id SERIAL PRIMARY KEY,
+    challenge_id UUID REFERENCES public.challenges(id) ON DELETE CASCADE,
+    image_url TEXT NOT NULL, -- Path to your S3/Cloud storage bucket
+    display_order INT NOT NULL, -- Ensures both players see images in the exact same order
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
 
-CREATE SEQUENCE public.player_id_seq
-    AS integer
-    START WITH 1
-    INCREMENT BY 1
-    NO MINVALUE
-    NO MAXVALUE
-    CACHE 1;
-
-
---
--- Name: player_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
---
-
-ALTER SEQUENCE public.player_id_seq OWNED BY public.player.id;
-
-
---
--- Name: player id; Type: DEFAULT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.player ALTER COLUMN id SET DEFAULT nextval('public.player_id_seq'::regclass);
-
-
---
--- Name: player player_email_key; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.player
-    ADD CONSTRAINT player_email_key UNIQUE (email);
-
-
---
--- Name: player player_pkey; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.player
-    ADD CONSTRAINT player_pkey PRIMARY KEY (id);
-
+-- Index for instant image lookups when a link is clicked
+CREATE INDEX IF NOT EXISTS idx_challenge_images_id ON public.challenge_images(challenge_id);
 
 --
 -- PostgreSQL database dump complete
 --
-
-\unrestrict d6LfLHgMvWLWyL0VHElM1lHCToTk0dmkTQcvgYXy4tIWo3QbCPWfTos2BPqMUfa
-
