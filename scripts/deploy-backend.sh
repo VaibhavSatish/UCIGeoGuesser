@@ -1,7 +1,6 @@
-
-
-cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" || exit 1
-cd ../backend 
+#!/bin/bash
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "$SCRIPT_DIR/../backend"
 echo "Stopping and removing existing backend Docker container..."
 sudo docker stop backend
 sudo docker rm backend
