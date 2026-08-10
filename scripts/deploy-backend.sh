@@ -1,6 +1,7 @@
 #!/bin/bash
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-cd "$SCRIPT_DIR/../backend"
+BACKEND_DIR="$SCRIPT_DIR/../backend"
+cd "$BACKEND_DIR" || exit 1
 echo "Stopping and removing existing backend Docker container..."
 sudo docker stop backend
 sudo docker rm backend
@@ -12,8 +13,8 @@ sudo docker run -d \
   --name backend \
   --restart unless-stopped \
   -p 18080:18080 \
-  -v key-file.json:/backend/key-file.json:ro \
+  -v "$BACKEND_DIR/key-file.json:/backend/key-file.json:ro" \
   -e GOOGLE_APPLICATION_CREDENTIALS="/backend/key-file.json" \
-  --env-file .env \
+  --env-file "$BACKEND_DIR/.env" \
   ucigeoguesser
 echo "Successfully deployed backend Docker container."
