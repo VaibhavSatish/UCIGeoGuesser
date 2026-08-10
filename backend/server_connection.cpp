@@ -10,6 +10,7 @@
 #include <algorithm>
 #include <chrono>
 #include "upload_images.cpp"
+#include <pqxx/pqxx>
 
 // ──────────────────────────────────────────────
 // Global state
@@ -17,6 +18,7 @@
 
 // Pre-loaded image index (populated once at startup)
 static vector<ImageEntry> g_image_index;
+static string g_db_connection_string;
 
 // Active game sessions (protected by mutex for thread safety)
 static std::unordered_map<string, GameSession> g_sessions;
@@ -44,7 +46,6 @@ static void cleanup_expired_sessions() {
 
 // Pick `count` unique random indices from [0, pool_size)
 static vector<int> pick_random_indices(int pool_size, int count) {
-    // Build a list of all indices and shuffle
     vector<int> all(pool_size);
     std::iota(all.begin(), all.end(), 0);
 
@@ -52,7 +53,6 @@ static vector<int> pick_random_indices(int pool_size, int count) {
     static std::mt19937 gen(rd());
     std::shuffle(all.begin(), all.end(), gen);
 
-    // Take the first `count` indices (or all if pool is smaller)
     int take = std::min(count, pool_size);
     return vector<int>(all.begin(), all.begin() + take);
 }
@@ -65,12 +65,20 @@ int main() {
     auto& cors = app.get_middleware<crow::CORSHandler>().global();
     cors.origin("*")
         .methods("GET"_method, "POST"_method, "OPTIONS"_method)
-        .headers("Content-Type", "ngrok-skip-browser-warning");
+        .headers("Content-Type", "ngrok-skip-browser-warning", "Authorization");
 
     /* Constants */
     const string IMAGE_DIRECTORY = "./res";
     const string METADATA_SUFFIX = "supplemental-metadata.json";
     const int MAX_ROUNDS = 25;
+
+    /* Initialize database connection */
+    const char* db_url = getenv("DATABASE_URL");
+    if (db_url == nullptr) {
+        cerr << "FATAL: DATABASE_URL environment variable not set." << endl;
+        return 1;
+    }
+    g_db_connection_string = string(db_url);
 
     /* ───── Startup: initialize GCS & load/upload image index ───── */
     auto client = initialize_gcs();
@@ -86,22 +94,215 @@ int main() {
 
     /* ───────────────────────────────────────
        GET /api/health_check
-       Response: { "status" }
        ─────────────────────────────────────── */
-    CROW_ROUTE(app, "/api/health_check").methods("GET"_method)
-    ([]() {
-
+    CROW_ROUTE(app, "/api/health_check").methods("GET"_method)([]() {
         crow::json::wvalue res;
         res["status"] = "ok";
         return crow::response(200, res);
-        
     });
 
+    /* ───────────────────────────────────────
+       POST /api/challenges
+       ─────────────────────────────────────── */
+    CROW_ROUTE(app, "/api/challenges").methods("POST"_method)([MAX_ROUNDS](const crow::request& req){
+        crow::json::wvalue res;
+        auto data = crow::json::load(req.body);
+        int requested_rounds = 5; 
+        if (data && data.has("totalRounds") && data["totalRounds"].t() == crow::json::type::Number) {
+            requested_rounds = data["totalRounds"].i();
+        }
+        if (requested_rounds <= 0) requested_rounds = 1;
+        if (requested_rounds > MAX_ROUNDS) requested_rounds = MAX_ROUNDS;
+        if (requested_rounds > static_cast<int>(g_image_index.size())) {
+            requested_rounds = static_cast<int>(g_image_index.size());
+        }
+
+        auto indices = pick_random_indices(g_image_index.size(), requested_rounds);
+        try {
+            pqxx::connection conn(g_db_connection_string);
+            pqxx::work txn(conn);
+
+            pqxx::result res_challenge = txn.exec_params(
+                "INSERT INTO public.challenges DEFAULT VALUES RETURNING id;"
+            );
+            string challenge_id = res_challenge[0]["id"].as<string>();
+
+            for (int i = 0; i < requested_rounds; ++i) {
+                const auto& img = g_image_index[indices[i]];
+                txn.exec_params(
+                    "INSERT INTO public.challenge_images (challenge_id, image_url, latitude, longitude, display_order) "
+                    "VALUES ($1, $2, $3, $4, $5);",
+                    challenge_id, img.gcs_url, img.latitude, img.longitude, i + 1
+                );
+            }
+
+            txn.commit();
+
+            res["challengeId"] = challenge_id;
+            res["totalRounds"] = requested_rounds;
+            return crow::response(201, res);
+
+        } catch (const std::exception& e) {
+            cerr << "DB Error in POST /api/challenges: " << e.what() << endl;
+            res["error"] = "Internal database error";
+            return crow::response(500, res);
+        }
+    });
+
+    /* ───────────────────────────────────────
+       GET /api/challenges/<uuid> (1v1 Endpoint)
+       ─────────────────────────────────────── */
+    CROW_ROUTE(app, "/api/challenges/<string>").methods("GET"_method)([](const string& challenge_id) {
+        crow::json::wvalue res;
+
+        try {
+            pqxx::connection conn(g_db_connection_string);
+            pqxx::read_transaction txn(conn);
+
+            pqxx::result img_res = txn.exec_params(
+                "SELECT display_order, image_url FROM public.challenge_images "
+                "WHERE challenge_id = $1 ORDER BY display_order ASC;",
+                challenge_id
+            );
+
+            if (img_res.empty()) {
+                res["error"] = "Challenge not found";
+                return crow::response(404, res);
+            }
+
+            vector<crow::json::wvalue> images_array;
+            for (auto row : img_res) {
+                crow::json::wvalue img_obj;
+                img_obj["displayOrder"] = row["display_order"].as<int>();
+                img_obj["imageUrl"] = row["image_url"].as<string>();
+                images_array.push_back(std::move(img_obj));
+            }
+
+            pqxx::result attempt_res = txn.exec_params(
+                "SELECT role, total_score, completed_at FROM public.challenge_attempts "
+                "WHERE challenge_id = $1;",
+                challenge_id
+            );
+
+            crow::json::wvalue attempts_obj;
+            attempts_obj["creator"] = crow::json::wvalue(nullptr);
+            attempts_obj["invitee"] = crow::json::wvalue(nullptr);
+
+            for (auto row : attempt_res) {
+                string role = row["role"].as<string>();
+                crow::json::wvalue att;
+                att["completed"] = !row["completed_at"].is_null();
+                if (!row["total_score"].is_null()) {
+                    att["totalScore"] = row["total_score"].as<int>();
+                }
+                attempts_obj[role] = std::move(att);
+            }
+
+            res["challengeId"] = challenge_id;
+            res["images"] = std::move(images_array);
+            res["attempts"] = std::move(attempts_obj);
+
+            return crow::response(200, res);
+
+        } catch (const std::exception& e) {
+            cerr << "DB Error in GET /api/challenges/{id}: " << e.what() << endl;
+            res["error"] = "Internal database error";
+            return crow::response(500, res);
+        }
+    });
+
+    /* ───────────────────────────────────────
+       POST /api/challenges/<uuid>/attempts (1v1 Endpoint)
+       ─────────────────────────────────────── */
+    CROW_ROUTE(app, "/api/challenges/<string>/attempts").methods("POST"_method)([](const crow::request& req, const string& challenge_id) {
+        crow::json::wvalue res;
+        auto data = crow::json::load(req.body);
+
+        if (!data || !data.has("role") || !data.has("guesses")) {
+            res["error"] = "Missing role or guesses";
+            return crow::response(400, res);
+        }
+
+        string role = data["role"].s();
+        if (role != "creator" && role != "invitee") {
+            res["error"] = "Invalid role. Must be 'creator' or 'invitee'";
+            return crow::response(400, res);
+        }
+
+        try {
+            pqxx::connection conn(g_db_connection_string);
+            pqxx::work txn(conn);
+
+            pqxx::result img_res = txn.exec_params(
+                "SELECT display_order, latitude, longitude FROM public.challenge_images "
+                "WHERE challenge_id = $1 ORDER BY display_order ASC;",
+                challenge_id
+            );
+
+            if (img_res.empty()) {
+                res["error"] = "Challenge not found";
+                return crow::response(404, res);
+            }
+
+            std::map<int, std::pair<double, double>> answers;
+            for (auto row : img_res) {
+                answers[row["display_order"].as<int>()] = 
+                    {row["latitude"].as<double>(), row["longitude"].as<double>()};
+            }
+
+            const auto& guesses_json = data["guesses"];
+            if (guesses_json.t() != crow::json::type::List) {
+                res["error"] = "Guesses must be a list";
+                return crow::response(400, res);
+            }
+
+            int total_score = 0;
+            vector<crow::json::wvalue> round_breakdowns;
+
+            for (const auto& guess : guesses_json) {
+                int display_order = guess["displayOrder"].i();
+                double user_lat = guess["lat"].d();
+                double user_lng = guess["lng"].d();
+
+                if (answers.find(display_order) == answers.end()) continue;
+
+                auto target = answers[display_order];
+                int round_score = calculate_score(user_lat, user_lng, target.first, target.second);
+                total_score += round_score;
+
+                crow::json::wvalue rb;
+                rb["displayOrder"] = display_order;
+                rb["score"] = round_score;
+                rb["answerLat"] = target.first;
+                rb["answerLng"] = target.second;
+                round_breakdowns.push_back(std::move(rb));
+            }
+
+            txn.exec_params(
+                "INSERT INTO public.challenge_attempts (challenge_id, role, total_score, completed_at) "
+                "VALUES ($1, $2, $3, CURRENT_TIMESTAMP);",
+                challenge_id, role, total_score
+            );
+
+            txn.commit();
+
+            res["success"] = true;
+            res["totalScore"] = total_score;
+            res["roundBreakdowns"] = std::move(round_breakdowns);
+            return crow::response(200, res);
+
+        } catch (const pqxx::unique_violation&) {
+            res["error"] = "An attempt for this role has already been submitted.";
+            return crow::response(409, res);
+        } catch (const std::exception& e) {
+            cerr << "DB Error in POST /api/challenges/{id}/attempts: " << e.what() << endl;
+            res["error"] = "Internal database error";
+            return crow::response(500, res);
+        }
+    });
 
     /* ───────────────────────────────────────
        POST /api/start_game
-       Request:  { "totalRounds": 5 }
-       Response: { "sessionId", "totalRounds", "round", "imageUrl" }
        ─────────────────────────────────────── */
     CROW_ROUTE(app, "/api/start_game").methods("POST"_method)
     ([MAX_ROUNDS](const crow::request& req) {
@@ -121,15 +322,12 @@ int main() {
         int requested_rounds = data["totalRounds"].i();
         if (requested_rounds <= 0) requested_rounds = 1;
         if (requested_rounds > MAX_ROUNDS) requested_rounds = MAX_ROUNDS;
-        // Don't request more rounds than we have images
         if (requested_rounds > static_cast<int>(g_image_index.size())) {
             requested_rounds = static_cast<int>(g_image_index.size());
         }
 
-        // Pick random images
         auto indices = pick_random_indices(g_image_index.size(), requested_rounds);
 
-        // Build session
         GameSession session;
         session.session_id = generate_session_id();
         session.current_round = 0;
@@ -148,17 +346,14 @@ int main() {
             session.rounds.push_back(rd);
         }
 
-
         string sid = session.session_id;
 
-        // Store session
         {
             std::lock_guard<std::mutex> lock(g_sessions_mutex);
             cleanup_expired_sessions();
             g_sessions[sid] = std::move(session);
         }
 
-        // Respond with first round (no answer coords!)
         const auto& first_round = g_sessions[sid].rounds[0];
         res["sessionId"] = sid;
         res["totalRounds"] = requested_rounds;
@@ -173,8 +368,6 @@ int main() {
 
     /* ───────────────────────────────────────
        POST /api/get_round
-       Request:  { "sessionId": "..." }
-       Response: { "round", "totalRounds", "imageUrl" }
        ─────────────────────────────────────── */
     CROW_ROUTE(app, "/api/get_round").methods("POST"_method)
     ([](const crow::request& req) {
@@ -206,7 +399,7 @@ int main() {
         }
 
         const auto& round = session.rounds[round_idx];
-        res["round"] = round_idx + 1;  // 1-indexed for the client
+        res["round"] = round_idx + 1;
         res["totalRounds"] = static_cast<int>(session.rounds.size());
         res["imageUrl"] = round.gcs_url;
 
@@ -215,9 +408,6 @@ int main() {
 
     /* ───────────────────────────────────────
        POST /api/submit_guess
-       Request:  { "sessionId": "...", "lat": N, "lng": N }
-       Response: { "score", "answerLat", "answerLng",
-                   "totalScore", "round", "gameOver" }
        ─────────────────────────────────────── */
     CROW_ROUTE(app, "/api/submit_guess").methods("POST"_method)
     ([](const crow::request& req) {
@@ -257,7 +447,6 @@ int main() {
             return crow::response(400, res);
         }
 
-        // Calculate score
         int score = calculate_score(user_lat, user_lng,
                                     round.answer_lat, round.answer_lng);
         round.score = score;
@@ -268,7 +457,6 @@ int main() {
         bool game_over = (session.current_round >=
                           static_cast<int>(session.rounds.size()));
 
-        // NOW reveal the answer coordinates
         res["score"] = score;
         res["answerLat"] = round.answer_lat;
         res["answerLng"] = round.answer_lng;
@@ -282,20 +470,11 @@ int main() {
              << " total=" << session.total_score
              << " gameOver=" << game_over << endl;
 
-        // Clean up completed session
-        if (game_over) {
-            // Keep it briefly so the client can read the final response,
-            // but it will be cleaned up by timeout eventually.
-        }
-
         return crow::response(200, res);
     });
 
     /* ───────────────────────────────────────
        POST /api/skip_round
-       Request:  { "sessionId": "..." }
-       Response: { "score": 0, "answerLat", "answerLng",
-                   "totalScore", "round", "gameOver" }
        ─────────────────────────────────────── */
     CROW_ROUTE(app, "/api/skip_round").methods("POST"_method)
     ([](const crow::request& req) {
@@ -332,7 +511,6 @@ int main() {
             return crow::response(400, res);
         }
 
-        // Score is 0 for a skip
         round.score = 0;
         round.submitted = true;
         session.current_round++;
