@@ -26,11 +26,11 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(laserpants_dotenv)
 
-
 # Find Asio (This often provides a proper target, so we keep it)
 find_package(asio CONFIG REQUIRED)
 
-
+# Find libpqxx (Required for PostgreSQL database connection support)
+find_package(libpqxx CONFIG REQUIRED)
 
 # Handle Threads (Crow usually requires Pthreads on Linux)
 find_package(Threads REQUIRED)
@@ -54,7 +54,7 @@ target_include_directories(server_connection PRIVATE
     ${laserpants_dotenv_SOURCE_DIR}/include
 )
 
-# 5. Link only actual libraries (Asio and Threads)
+# Link actual libraries
 target_link_libraries(server_connection PRIVATE 
     asio::asio 
     Threads::Threads
@@ -62,4 +62,5 @@ target_link_libraries(server_connection PRIVATE
     OpenSSL::SSL
     OpenSSL::Crypto
     nlohmann_json::nlohmann_json
+    libpqxx::pqxx
 )
