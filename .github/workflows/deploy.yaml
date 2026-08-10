@@ -1,5 +1,6 @@
 name: Deploy to Oracle Cloud VM
 on:
+  workflow_dispatch:
   push:
     branches:
       - main
@@ -15,10 +16,10 @@ jobs:
           ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
       - name: Deploy to Oracle Cloud VM
         run: |
-          ssh -o StrictHostKeyChecking=no ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} << 'EOF'
+          ssh -o StrictHostKeyChecking=no ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} <<- 'EOF'
             cd ucigeoguesser
             git clean -fd
             git pull origin main 
             sudo ./scripts/deploy-backend.sh
-            EOF          
+          EOF          
         shell: bash
