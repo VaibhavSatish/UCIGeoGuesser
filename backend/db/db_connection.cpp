@@ -2,14 +2,13 @@
 #include <pqxx/pqxx>
 #include <string>
 
-bool connect_to_database(std::string dbname, std::string user, std::string password, std::string hostaddr, pqxx::connection& conn) {
-    try {
-        conn = pqxx::connection("dbname=" + dbname + " user=" + user + " password=" + password + " hostaddr=" + hostaddr);
-        return true;
-    } catch (const std::exception &e) {
-        std::cerr << "Error connecting to database: " << e.what() << std::endl;
-        return false;
+pqxx::connection connect_to_db() {
+    // uses the environment variable DATABASE_URL for connection string
+    const char* db_url = getenv("DATABASE_URL");
+    if (db_url == nullptr) {
+        throw std::runtime_error("DATABASE_URL environment variable not set.");
     }
+    return pqxx::connection(db_url);
 }
 
 bool add_image_entry(pqxx::connection& conn, const std::string& gcs_url, double latitude, double longitude) {

@@ -18,9 +18,14 @@ sudo systemctl start postgresql
 ```
 
 ### For Docker Users
-Currently, we have not setup Docker compose, so you will have to setup container manually...
+Docker Compose:
 ```bash
-docker run -d --name my-postgres -p 5432:5432 -e POSTGRES_PASSWORD=mysecretpassword -v pgdata:/var/lib/postgresql/data postgres
+docker compose up
+```
+
+Manual Docker CMD (without docker compose)
+```bash
+docker run -d --name db -p 5432:5432 -e POSTGRES_USER=user -e POSTGRES_PASSWORD=password -e POSTGRES_DB=mydatabase  -v db_data:/var/lib/postgresql/data postgres
 ```
 
 
