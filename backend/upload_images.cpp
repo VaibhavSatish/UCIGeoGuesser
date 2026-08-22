@@ -298,9 +298,9 @@ bool GcsClient::DeleteObject(const string& bucket, const string& object_name) {
 // ──────────────────────────────────────────────
 
 const char* initialize_bucket() {
-    const char* bucket_env = getenv("BUCKET_NAME");
+    const char* bucket_env = std::getenv("GOOGLE_BUCKET_NAME");
     if (bucket_env == nullptr) {
-      std::cerr << "Error: BUCKET_NAME environment variable not set." << std::endl;
+      std::cerr << "Error: GOOGLE_BUCKET_NAME environment variable not set." << std::endl;
       exit(EXIT_FAILURE);
     }
     return bucket_env;

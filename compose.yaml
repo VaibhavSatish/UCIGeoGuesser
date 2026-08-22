@@ -6,8 +6,6 @@ services:
       - DATABASE_URL=postgres://user:password@db:5432/mydatabase
       - GOOGLE_APPLICATION_CREDENTIALS=/backend/key-file.json
       - GOOGLE_BUCKET_NAME=${BUCKET_NAME}
-    env_file:
-      - ./backend/.env
     restart: unless-stopped
     ports:
       - "18080:18080"
