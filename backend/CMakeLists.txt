@@ -17,14 +17,7 @@ if(CMAKE_BUILD_TYPE STREQUAL "Release")
     set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -s")
 endif()
 
-# Include dotenv-cpp using FetchContent
-include(FetchContent)
-FetchContent_Declare(
-    laserpants_dotenv
-    GIT_REPOSITORY https://github.com/laserpants/dotenv-cpp
-    GIT_TAG master
-)
-FetchContent_MakeAvailable(laserpants_dotenv)
+
 
 # Find Asio (This often provides a proper target, so we keep it)
 find_package(asio CONFIG REQUIRED)
@@ -51,7 +44,6 @@ set_target_properties(server_connection PROPERTIES OUTPUT_NAME "backend")
 # Find Crow
 target_include_directories(server_connection PRIVATE 
     ${CROW_INCLUDE_DIR}
-    ${laserpants_dotenv_SOURCE_DIR}/include
 )
 
 # Link actual libraries

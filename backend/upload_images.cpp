@@ -11,7 +11,6 @@
 #include <openssl/evp.h>
 #include <openssl/pem.h>
 #include <openssl/bio.h>
-#include "laserpants/dotenv/dotenv.h"
 #include "upload_images.hpp"
 #include <nlohmann/json.hpp>
 #include <vector>
@@ -299,7 +298,6 @@ bool GcsClient::DeleteObject(const string& bucket, const string& object_name) {
 // ──────────────────────────────────────────────
 
 const char* initialize_bucket() {
-    dotenv::init();
     const char* bucket_env = getenv("BUCKET_NAME");
     if (bucket_env == nullptr) {
       std::cerr << "Error: BUCKET_NAME environment variable not set." << std::endl;
@@ -309,7 +307,6 @@ const char* initialize_bucket() {
 }
 
 GcsClient initialize_gcs() {
-    dotenv::init();
     return GcsClient();
 }
 
