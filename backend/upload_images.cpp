@@ -294,7 +294,7 @@ bool GcsClient::DeleteObject(const string& bucket, const string& object_name) {
 }
 
 // ──────────────────────────────────────────────
-// GCS helpers (existing, unchanged)
+// GCS helpers
 // ──────────────────────────────────────────────
 
 const char* initialize_bucket() {
@@ -362,7 +362,7 @@ void delete_objects_from_bucket(GcsClient& client, const string& bucket_name, co
 }
 
 // ──────────────────────────────────────────────
-// Game logic (new)
+// Game logic 
 // ──────────────────────────────────────────────
 
 vector<ImageEntry> load_image_index(GcsClient& client,
