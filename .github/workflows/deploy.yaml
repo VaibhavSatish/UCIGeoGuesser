@@ -21,9 +21,8 @@ jobs:
           GCS_KEY_BASE64: ${{ secrets.GCS_KEY_BASE64 }}
         run: |
           ssh -o StrictHostKeyChecking=no ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} "
-            sudo mkdir -p /root/Downloads && \
-            echo '$GCS_KEY_BASE64' | base64 -d | sudo tee /root/Downloads/key-file.json > /dev/null && \
             cd ucigeoguesser && \
+            git restore . && \
             git clean -fd && \
             git pull origin main && \
             sudo ./scripts/deploy-backend.sh
