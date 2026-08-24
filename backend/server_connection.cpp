@@ -1,6 +1,7 @@
 #include "crow.h"
 #include "crow/middlewares/cors.h"
 #include <map>
+#include <unordered_map>
 #include <string>
 #include <fstream>
 #include <sstream>
@@ -8,7 +9,9 @@
 #include <mutex>
 #include <random>
 #include <algorithm>
+#include <numeric>
 #include <chrono>
+#include <iostream>
 #include "upload_images.cpp"
 #include <pqxx/pqxx>
 
@@ -59,6 +62,10 @@ static vector<int> pick_random_indices(int pool_size, int count) {
 
 int main() {
     using namespace std;
+
+    /* Load .env first. Preserve means real environment variables (e.g. from
+       docker --env-file) win over the file, so deployments can override it. */
+    dotenv::init(dotenv::Preserve);
 
     /* Initialize the Crow app with CORS support */
     crow::App<crow::CORSHandler> app;
@@ -199,12 +206,18 @@ int main() {
             }
 
             res["challengeId"] = challenge_id;
+            res["totalRounds"] = static_cast<int>(images_array.size());
             res["images"] = std::move(images_array);
             res["attempts"] = std::move(attempts_obj);
 
             return crow::response(200, res);
 
         } catch (const std::exception& e) {
+            string msg = e.what();
+            if (msg.find("invalid input syntax") != string::npos) {
+                res["error"] = "Challenge not found";
+                return crow::response(404, res);
+            }
             cerr << "DB Error in GET /api/challenges/{id}: " << e.what() << endl;
             res["error"] = "Internal database error";
             return crow::response(500, res);
@@ -260,6 +273,11 @@ int main() {
             vector<crow::json::wvalue> round_breakdowns;
 
             for (const auto& guess : guesses_json) {
+                if (guess.t() != crow::json::type::Object ||
+                    !guess.has("displayOrder") || !guess.has("lat") || !guess.has("lng")) {
+                    res["error"] = "Each guess needs displayOrder, lat, and lng";
+                    return crow::response(400, res);
+                }
                 int display_order = guess["displayOrder"].i();
                 double user_lat = guess["lat"].d();
                 double user_lng = guess["lng"].d();
@@ -295,6 +313,11 @@ int main() {
             res["error"] = "An attempt for this role has already been submitted.";
             return crow::response(409, res);
         } catch (const std::exception& e) {
+            string msg = e.what();
+            if (msg.find("invalid input syntax") != string::npos) {
+                res["error"] = "Challenge not found";
+                return crow::response(404, res);
+            }
             cerr << "DB Error in POST /api/challenges/{id}/attempts: " << e.what() << endl;
             res["error"] = "Internal database error";
             return crow::response(500, res);
@@ -347,6 +370,7 @@ int main() {
         }
 
         string sid = session.session_id;
+        string first_image_url = session.rounds[0].gcs_url;
 
         {
             std::lock_guard<std::mutex> lock(g_sessions_mutex);
@@ -354,11 +378,10 @@ int main() {
             g_sessions[sid] = std::move(session);
         }
 
-        const auto& first_round = g_sessions[sid].rounds[0];
         res["sessionId"] = sid;
         res["totalRounds"] = requested_rounds;
         res["round"] = 1;
-        res["imageUrl"] = first_round.gcs_url;
+        res["imageUrl"] = first_image_url;
 
         cout << "Game started: session=" << sid
              << " rounds=" << requested_rounds << endl;
