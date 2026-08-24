@@ -14,8 +14,11 @@ pqxx::connection connect_to_db() {
 bool add_image_entry(pqxx::connection& conn, const std::string& gcs_url, double latitude, double longitude) {
     try {
         pqxx::work txn(conn);
-        txn.exec_params("INSERT INTO images (gcs_url, latitude, longitude) VALUES ($1, $2, $3)",
-                        gcs_url, latitude, longitude);
+        txn.exec(
+            "INSERT INTO images (gcs_url, latitude, longitude) "
+            "VALUES ($1, $2, $3);",
+            {gcs_url, latitude, longitude}
+        );
         txn.commit();
         return true;
     } catch (const std::exception &e) {
@@ -23,3 +26,4 @@ bool add_image_entry(pqxx::connection& conn, const std::string& gcs_url, double 
         return false;
     }
 }
+

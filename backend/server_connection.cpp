@@ -17,7 +17,6 @@
 // ──────────────────────────────────────────────
 
 // Pre-loaded image index (populated once at startup)
-static vector<ImageEntry> g_image_index;
 static string g_db_connection_string;
 
 // Active game sessions (protected by mutex for thread safety)
@@ -46,18 +45,7 @@ static void cleanup_expired_sessions() {
     }
 }
 
-// Pick `count` unique random indices from [0, pool_size)
-static vector<int> pick_random_indices(int pool_size, int count) {
-    vector<int> all(pool_size);
-    std::iota(all.begin(), all.end(), 0);
 
-    static std::random_device rd;
-    static std::mt19937 gen(rd());
-    std::shuffle(all.begin(), all.end(), gen);
-
-    int take = std::min(count, pool_size);
-    return vector<int>(all.begin(), all.begin() + take);
-}
 
 int main() {
     using namespace std;
@@ -85,14 +73,11 @@ int main() {
     /* ───── Startup: initialize GCS & load/upload image index ───── */
     auto client = initialize_gcs();
     const char* bucket_name = initialize_bucket();
+    write_image_index_to_db(client, bucket_name, IMAGE_DIRECTORY, METADATA_SUFFIX);
 
-    g_image_index = load_image_index(client, bucket_name, IMAGE_DIRECTORY, METADATA_SUFFIX);
-    if (g_image_index.empty()) {
-        cerr << "FATAL: No images found in " << IMAGE_DIRECTORY << endl;
-        return 1;
-    }
+    
 
-    cout << "Server starting with " << g_image_index.size() << " indexed & uploaded images." << endl;
+    
 
     /* ───────────────────────────────────────
        GET /api/health_check
@@ -115,26 +100,23 @@ int main() {
         }
         if (requested_rounds <= 0) requested_rounds = 1;
         if (requested_rounds > MAX_ROUNDS) requested_rounds = MAX_ROUNDS;
-        if (requested_rounds > static_cast<int>(g_image_index.size())) {
-            requested_rounds = static_cast<int>(g_image_index.size());
-        }
 
-        auto indices = pick_random_indices(g_image_index.size(), requested_rounds);
+        auto images_entries = get_images_for_rounds(requested_rounds);
         try {
             pqxx::connection conn(g_db_connection_string);
             pqxx::work txn(conn);
 
-            pqxx::result res_challenge = txn.exec_params(
+            pqxx::result res_challenge = txn.exec(
                 "INSERT INTO public.challenges DEFAULT VALUES RETURNING id;"
             );
             string challenge_id = res_challenge[0]["id"].as<string>();
 
-            for (int i = 0; i < requested_rounds; ++i) {
-                const auto& img = g_image_index[indices[i]];
-                txn.exec_params(
+            for (int i = 0; i < static_cast<int>(images_entries.size()); ++i) {
+                const auto& img = images_entries[i];
+                txn.exec(
                     "INSERT INTO public.challenge_images (challenge_id, image_url, latitude, longitude, display_order) "
                     "VALUES ($1, $2, $3, $4, $5);",
-                    challenge_id, img.gcs_url, img.latitude, img.longitude, i + 1
+                    {challenge_id, img.gcs_url, img.latitude, img.longitude, i + 1}
                 );
             }
 
@@ -161,10 +143,10 @@ int main() {
             pqxx::connection conn(g_db_connection_string);
             pqxx::read_transaction txn(conn);
 
-            pqxx::result img_res = txn.exec_params(
+            pqxx::result img_res = txn.exec(
                 "SELECT display_order, image_url FROM public.challenge_images "
                 "WHERE challenge_id = $1 ORDER BY display_order ASC;",
-                challenge_id
+                pqxx::params{challenge_id}
             );
 
             if (img_res.empty()) {
@@ -180,10 +162,10 @@ int main() {
                 images_array.push_back(std::move(img_obj));
             }
 
-            pqxx::result attempt_res = txn.exec_params(
+            pqxx::result attempt_res = txn.exec(
                 "SELECT role, total_score, completed_at FROM public.challenge_attempts "
                 "WHERE challenge_id = $1;",
-                challenge_id
+                pqxx::params{challenge_id}
             );
 
             crow::json::wvalue attempts_obj;
@@ -235,10 +217,10 @@ int main() {
             pqxx::connection conn(g_db_connection_string);
             pqxx::work txn(conn);
 
-            pqxx::result img_res = txn.exec_params(
+            pqxx::result img_res = txn.exec(
                 "SELECT display_order, latitude, longitude FROM public.challenge_images "
                 "WHERE challenge_id = $1 ORDER BY display_order ASC;",
-                challenge_id
+                pqxx::params{challenge_id}
             );
 
             if (img_res.empty()) {
@@ -280,10 +262,10 @@ int main() {
                 round_breakdowns.push_back(std::move(rb));
             }
 
-            txn.exec_params(
+            txn.exec(
                 "INSERT INTO public.challenge_attempts (challenge_id, role, total_score, completed_at) "
                 "VALUES ($1, $2, $3, CURRENT_TIMESTAMP);",
-                challenge_id, role, total_score
+                {challenge_id, role, total_score}
             );
 
             txn.commit();
@@ -324,11 +306,8 @@ int main() {
         int requested_rounds = data["totalRounds"].i();
         if (requested_rounds <= 0) requested_rounds = 1;
         if (requested_rounds > MAX_ROUNDS) requested_rounds = MAX_ROUNDS;
-        if (requested_rounds > static_cast<int>(g_image_index.size())) {
-            requested_rounds = static_cast<int>(g_image_index.size());
-        }
 
-        auto indices = pick_random_indices(g_image_index.size(), requested_rounds);
+        auto images_entries = get_images_for_rounds(requested_rounds);
 
         GameSession session;
         session.session_id = generate_session_id();
@@ -336,10 +315,9 @@ int main() {
         session.total_score = 0;
         session.created_at = std::chrono::steady_clock::now();
 
-        for (int idx : indices) {
-            const auto& img = g_image_index[idx];
+        for (const auto& img : images_entries) {
             RoundData rd;
-            rd.image_index = idx;
+            rd.image_id = img.id;
             rd.gcs_url = img.gcs_url;
             rd.answer_lat = img.latitude;
             rd.answer_lng = img.longitude;

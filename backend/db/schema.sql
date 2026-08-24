@@ -124,7 +124,7 @@ CREATE TABLE public.challenges (
 
 CREATE TABLE public.images (
     id integer NOT NULL,
-    image_url text NOT NULL,
+    gcs_url text NOT NULL,
     latitude double precision NOT NULL,
     longitude double precision NOT NULL
 );

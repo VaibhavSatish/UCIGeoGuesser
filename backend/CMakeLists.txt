@@ -36,14 +36,18 @@ find_package(OpenSSL REQUIRED)
 
 find_package(nlohmann_json CONFIG REQUIRED)
 
-add_executable(server_connection server_connection.cpp)
+add_executable(server_connection 
+  server_connection.cpp
+  db/db_connection.cpp
+)
 
 # Rename the binary to "backend" for clarity
 set_target_properties(server_connection PROPERTIES OUTPUT_NAME "backend")
 
-# Find Crow
+
 target_include_directories(server_connection PRIVATE 
     ${CROW_INCLUDE_DIR}
+    db/
 )
 
 # Link actual libraries
