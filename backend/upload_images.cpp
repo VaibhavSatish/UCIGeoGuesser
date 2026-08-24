@@ -299,7 +299,7 @@ bool GcsClient::DeleteObject(const string& bucket, const string& object_name) {
 // ──────────────────────────────────────────────
 
 const char* initialize_bucket() {
-    dotenv::init();
+    dotenv::init(dotenv::Preserve);
     const char* bucket_env = getenv("BUCKET_NAME");
     if (bucket_env == nullptr) {
       std::cerr << "Error: BUCKET_NAME environment variable not set." << std::endl;
@@ -309,7 +309,7 @@ const char* initialize_bucket() {
 }
 
 GcsClient initialize_gcs() {
-    dotenv::init();
+    dotenv::init(dotenv::Preserve);
     return GcsClient();
 }
 
