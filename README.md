@@ -4,10 +4,6 @@ A GeoGuessr-style guessing game set entirely on the University of California, Ir
 
 🔗 **Live app:** [ucigeoguesser.vercel.app](https://ucigeoguesser.vercel.app/)
 
-Credits:
-OpenStreetMap API
-Thank you for allowing us to utilize your api to make our vision possible!
-
 ## Development
 #### Getting Started
 To get started, please read the frontend, backend, and db `README.md` and setup the environment accordingly.
