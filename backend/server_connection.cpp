@@ -53,9 +53,7 @@ static void cleanup_expired_sessions() {
 int main() {
     using namespace std;
 
-    /* Load .env first. Preserve means real environment variables (e.g. from
-       docker --env-file) win over the file, so deployments can override it. */
-    dotenv::init(dotenv::Preserve);
+    
 
     /* Initialize the Crow app with CORS support */
     crow::App<crow::CORSHandler> app;

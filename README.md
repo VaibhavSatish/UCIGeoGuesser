@@ -8,7 +8,7 @@ Credits:
 OpenStreetMap API
 Thank you for allowing us to utilize your api to make our vision possible!
 
-### Development
+## Development
 #### Getting Started
 To get started, please read the frontend, backend, and db `README.md` and setup the environment accordingly.
 
@@ -85,22 +85,48 @@ Closes #
 ## Project structure
 
 ```
-UCIGeoGuesser/
-├── backend/          # C++ (Crow) API server, Dockerfile, CMake build
-│   ├── server_connection.cpp
-│   ├── upload_images.cpp / .hpp
+.
+├── backend
 │   ├── api_documentation.md
-│   └── CMakeLists.txt
-├── frontend/         # Next.js game client
-│   └── app/
-│       ├── page.tsx          # Landing page
-│       ├── TitleScreen.tsx   # Title/start screen
-│       ├── game/page.tsx     # Core game loop
-│       ├── guess.tsx         # Guess map component
-│       ├── results.tsx       # Per-round results
-│       ├── GameOver.tsx      # End-of-game summary
-│       └── GameTimer.jsx     # Round timer
-└── scripts/          # Docker build/run and deployment helper scripts
+│   ├── CMakeLists.txt
+│   ├── db
+│   ├── Dockerfile
+│   ├── README.md
+│   ├── server_connection.cpp
+│   ├── triplets
+│   ├── upload_images.cpp
+│   ├── upload_images.hpp
+│   ├── vcpkg-configuration.json
+│   └── vcpkg.json
+├── compose.yaml
+├── frontend
+│   ├── app
+│   │   ├── challenge
+|   |   |     └── page.tsx
+│   │   ├── ChallengeResults.tsx
+│   │   ├── favicon.ico
+│   │   ├── game
+|   |   |     └── page.tsx
+│   │   ├── GameOver.tsx
+│   │   ├── GameTimer.jsx
+│   │   ├── globals.css
+│   │   ├── guess.tsx
+│   │   ├── layout.tsx
+│   │   ├── lib
+│   │   ├── page.tsx
+│   │   ├── results.tsx
+│   │   └── TitleScreen.tsx
+│   ├── package-lock.json
+│   ├── package.json
+│   ├── public
+│   ├── README.md
+│   └── tsconfig.json
+├── README.md
+└── scripts
+    ├── build-docker.sh
+    ├── clean-docker.sh
+    ├── deploy-backend.sh
+    └── run-docker.sh
 ```
 
 ## Backend API
@@ -129,37 +155,19 @@ npm run dev
 
 Then open [http://localhost:3000](http://localhost:3000).
 
-### Backend
+### Backend and Database
 
-The backend is built and run via Docker:
+The backend requires Google Cloud Storage credentials to run:
 
+The database we are using is postgres (look at `$REPO_ROOT/backend/db/schema.sql` for schema).
+
+Both services are bundled together through Docker Compose.
+
+To run the services:
 ```bash
-cd backend
-
-# Build the image
-docker build -t ucigeoguesser --target builder .
-
-# Run the container
-docker run -p 18080:18080 -d --name backend -v .:/backend ucigeoguesser sleep infinity
-
-# Enter the container / run the server
-docker exec -it backend bash
-# or
-docker exec -it backend ./build/backend
+docker compose up --build 
 ```
-
-You'll also need to authenticate with Google Cloud (used for image storage):
-
-```bash
-gcloud auth application-default login
-```
-
-If you're not using Docker, you can build directly with CMake + vcpkg:
-
-```bash
-cmake -B build -S . -DCMAKE_TOOLCHAIN_FILE=/vcpkg/scripts/buildsystems/vcpkg.cmake
-cmake --build build
-```
+Please see `$REPO_ROOT/backend/README.md` and `$REPO_ROOT/backend/db/README.md` for more information.
 
 > Tip: the [Dev Containers](https://code.visualstudio.com/docs/devcontainers/containers) VS Code extension makes it easy to attach to and work inside the running backend container.
 
