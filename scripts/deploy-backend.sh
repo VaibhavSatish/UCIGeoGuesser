@@ -3,8 +3,8 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-ROOT_DIR="$SCRIPT_DIR/.."
-cd "$ROOT_DIR" || exit 1
+BACKEND_DIR="$SCRIPT_DIR/../backend"
+cd "$BACKEND_DIR" || exit 1
 
 
 echo "==> Building updated Docker images..."
