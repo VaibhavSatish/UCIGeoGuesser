@@ -65,7 +65,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates
 WORKDIR /backend
 
 COPY --from=builder /backend/build/backend .
-COPY --from=builder /backend/res ./res
+COPY --from=builder /backend/re[s] ./res
  
 EXPOSE 18080
  

@@ -10,6 +10,25 @@
  `3. psql postgres`
  `4. CREATE DATABASE db_name;`
 
+### For Ubuntu Users
+To install Postgres, use the `apt` package manager
+```bash
+sudo apt install postgresql postgresql-contrib
+sudo systemctl start postgresql
+```
+
+### For Docker Users
+Docker Compose:
+```bash
+docker compose up
+```
+
+Manual Docker CMD (without docker compose)
+```bash
+docker run -d --name db -p 5432:5432 -e POSTGRES_USER=user -e POSTGRES_PASSWORD=password -e POSTGRES_DB=mydatabase  -v db_data:/var/lib/postgresql/data postgres
+```
+
+
 ### For Windows Users
 WOMP WOMP
 

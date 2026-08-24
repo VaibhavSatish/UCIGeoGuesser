@@ -11,10 +11,10 @@
 #include <openssl/evp.h>
 #include <openssl/pem.h>
 #include <openssl/bio.h>
-#include "laserpants/dotenv/dotenv.h"
 #include "upload_images.hpp"
 #include <nlohmann/json.hpp>
 #include <vector>
+#include "db/db_connection.hpp"
 
 // ──────────────────────────────────────────────
 // Small HTTP + crypto helpers backing GcsClient
@@ -295,21 +295,19 @@ bool GcsClient::DeleteObject(const string& bucket, const string& object_name) {
 }
 
 // ──────────────────────────────────────────────
-// GCS helpers (existing, unchanged)
+// GCS helpers
 // ──────────────────────────────────────────────
 
 const char* initialize_bucket() {
-    dotenv::init(dotenv::Preserve);
-    const char* bucket_env = getenv("BUCKET_NAME");
+    const char* bucket_env = std::getenv("GOOGLE_BUCKET_NAME");
     if (bucket_env == nullptr) {
-      std::cerr << "Error: BUCKET_NAME environment variable not set." << std::endl;
+      std::cerr << "Error: GOOGLE_BUCKET_NAME environment variable not set." << std::endl;
       exit(EXIT_FAILURE);
     }
     return bucket_env;
 }
 
 GcsClient initialize_gcs() {
-    dotenv::init(dotenv::Preserve);
     return GcsClient();
 }
 
@@ -325,38 +323,12 @@ const string write_to_bucket(GcsClient& client, const string& bucket_name, const
     return object_link;
 }
 
-vector<unordered_map<string, string>> load_images_to_bucket(GcsClient& client, const string& directory, const string& bucket_name, const string& metadata, int capacity) {
-    vector<unordered_map<string, string>> images;
-    if (capacity <= 0) {
-        cerr << "Capacity must be greater than 0." << endl;
-        return images;
-    }
-    for (const auto& entry : filesystem::directory_iterator(directory)) {
-        cout << "Processing file: " << entry.path() << endl;
-        if (entry.is_regular_file() && (entry.path().extension() == ".jpg" || entry.path().extension() == ".jpeg")) {
-            const string& object_name = entry.path().filename().string();
-            const string& object_link = write_to_bucket(client, bucket_name, entry.path().string(), object_name);
-            unordered_map<string, string> image_info;
-            image_info["image"] = object_link;
-            ifstream metadata_file(entry.path().string() + "." + metadata);
-            json metadata_json = json::parse(metadata_file);
-            image_info["metadata"] = metadata_json["geoData"].dump();
-            images.push_back(image_info);
-            --capacity;
-        }
-        if (capacity == 0) {
-            break;
-        }
-    }
-    cout << "Finished processing images. Total images loaded: " << images.size() << endl;
-    return images;
-}
 
 void delete_objects_from_bucket(GcsClient& client, const string& bucket_name, const vector<string>& object_names) {
     for (const auto& object_name : object_names) {
         cout << "Deleting object: " << object_name << " from bucket: " << bucket_name << endl;
-        bool ok = client.DeleteObject(bucket_name, object_name);
-        if (!ok) {
+        bool success = client.DeleteObject(bucket_name, object_name);
+        if (!success) {
             cerr << "Error deleting object: " << object_name << endl;
         } else {
             cout << "Object deleted successfully: " << object_name << endl;
@@ -365,25 +337,27 @@ void delete_objects_from_bucket(GcsClient& client, const string& bucket_name, co
 }
 
 // ──────────────────────────────────────────────
-// Game logic (new)
+// Upload Images
 // ──────────────────────────────────────────────
 
-vector<ImageEntry> load_image_index(GcsClient& client,
+void write_image_index_to_db(GcsClient& client,
                                     const string& bucket_name,
                                     const string& directory,
                                     const string& metadata_suffix) {
-    vector<ImageEntry> index;
-
+  
+    
+    if (!_valid_directory(directory)) {
+        return;
+    }
+    auto conn = connect_to_db();
     for (const auto& entry : filesystem::directory_iterator(directory)) {
-        if (!entry.is_regular_file()) continue;
-        auto ext = entry.path().extension().string();
-        if (ext != ".jpg" && ext != ".jpeg") continue;
+        if (!_valid_image_file(entry.path().string())) {
+            continue;
+        }
 
         // Look for the matching metadata file
-        string meta_path = entry.path().string() + "." + metadata_suffix;
-        if (!filesystem::exists(meta_path)) {
-            cerr << "Warning: no metadata file for " << entry.path().filename()
-                 << ", skipping." << endl;
+        string meta_path = get_metadata_file_path(entry.path().string(), metadata_suffix);
+        if (meta_path.empty()) {
             continue;
         }
 
@@ -394,21 +368,85 @@ vector<ImageEntry> load_image_index(GcsClient& client,
             const string& object_name = entry.path().filename().string();
             string object_link = write_to_bucket(client, bucket_name, entry.path().string(), object_name);
 
-            ImageEntry img;
-            img.filename = object_name;
-            img.gcs_url = object_link;
-            img.latitude  = meta_json["geoData"]["latitude"].get<double>();
-            img.longitude = meta_json["geoData"]["longitude"].get<double>();
-            index.push_back(img);
+            double latitude = meta_json["geoData"]["latitude"].get<double>();
+            double longitude = meta_json["geoData"]["longitude"].get<double>();
+            cout << "Adding image entry to DB: " << object_link << " (lat: " << latitude << ", lng: " << longitude << ")" << endl;
+            add_image_entry(conn, object_link, latitude, longitude);
+            
         } catch (const std::exception& e) {
             cerr << "Error reading metadata/uploading " << entry.path().filename()
                  << ": " << e.what() << endl;
         }
     }
 
-    cout << "Image index loaded & uploaded: " << index.size() << " images." << endl;
-    return index;
 }
+
+std::vector<ImageEntry> get_images_for_rounds(int rounds) {
+    auto conn = connect_to_db();
+    std::vector<ImageEntry> images;
+    try {
+        pqxx::work txn(conn);
+        pqxx::result res = txn.exec("SELECT gcs_url, latitude, longitude FROM images ORDER BY RANDOM() ASC LIMIT " + std::to_string(rounds));
+        for (const auto& row : res) {
+            ImageEntry img;
+            img.gcs_url = row["gcs_url"].as<std::string>();
+            img.latitude = row["latitude"].as<double>();
+            img.longitude = row["longitude"].as<double>();
+            images.push_back(img);
+        }
+    } catch (const std::exception& e) {
+        cerr << "Error fetching images for rounds: " << e.what() << endl;
+    }
+    return images;
+
+}
+
+bool _valid_directory(const std::string& directory) {
+    if (!std::filesystem::exists(directory)) {
+        std::cerr << "Error: Directory does not exist: " << directory << std::endl;
+        return false;
+    }
+    if (!std::filesystem::is_directory(directory)) {
+        std::cerr << "Error: Path is not a directory: " << directory << std::endl;
+        return false;
+    }
+    if (std::filesystem::is_empty(directory)) {
+        std::cerr << "Warning: Directory is empty: " << directory << std::endl;
+        return false;
+    }
+    return true;
+}
+
+bool _valid_image_file(const std::string& file_path) {
+    if (!std::filesystem::exists(file_path)) {
+        std::cerr << "Error: File does not exist: " << file_path << std::endl;
+        return false;
+    }
+    if (!std::filesystem::is_regular_file(file_path)) {
+        std::cerr << "Error: Path is not a regular file: " << file_path << std::endl;
+        return false;
+    }
+    auto ext = std::filesystem::path(file_path).extension().string();
+    if (ext != ".jpg" && ext != ".jpeg") {
+        std::cerr << "Error: File is not a JPEG image: " << file_path << std::endl;
+        return false;
+    }
+    return true;
+}
+
+std::string get_metadata_file_path(const std::string& image_file_path, const std::string& metadata_suffix) {
+    std::string metadata_file_path = image_file_path + "." + metadata_suffix;
+    if (!std::filesystem::exists(metadata_file_path)) {
+        std::cerr << "Error: Metadata file does not exist for image: " << image_file_path << std::endl;
+        return "";
+    }
+    return metadata_file_path;
+}
+
+// ──────────────────────────────────────────────
+// Game logic 
+// ──────────────────────────────────────────────
+
 
 
 int calculate_score(double user_lat, double user_lng,

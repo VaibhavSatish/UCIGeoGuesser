@@ -1,0 +1,39 @@
+services:
+  backend:
+    container_name: backend
+    build: ./backend
+    environment:
+      - DATABASE_URL=postgres://user:password@db:5432/mydatabase
+      - GOOGLE_APPLICATION_CREDENTIALS=/backend/key-file.json
+      - GOOGLE_BUCKET_NAME=${BUCKET_NAME}
+    restart: unless-stopped
+    ports:
+      - "18080:18080"
+    volumes:
+      - ./backend/key-file.json:/backend/key-file.json
+    depends_on:
+      db:
+        condition: service_healthy
+  db:
+    container_name: db
+    image: postgres:18
+    environment:
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: mydatabase
+    restart: unless-stopped
+    ports:
+      - "5432:5432"
+    volumes:
+      - db_data:/var/lib/postgresql/
+      - ./backend/db/schema.sql:/docker-entrypoint-initdb.d/schema.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U user -d mydatabase"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+volumes:
+  db_data:
+
+
+  

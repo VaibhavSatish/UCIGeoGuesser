@@ -16,7 +16,7 @@ using json = nlohmann::json;
 
 // Represents a single image with its GCS URL and answer coordinates.
 struct ImageEntry {
-  string filename;     // e.g. "IMG_20241012_141927.jpg"
+  int id;              // unique identifier for the image
   string gcs_url;      // public GCS URL
   double latitude;
   double longitude;
@@ -24,7 +24,7 @@ struct ImageEntry {
 
 // One round within a game session.
 struct RoundData {
-  int image_index;     // index into the global image_index vector
+  int image_id;        // the image entry for this round
   string gcs_url;      // public GCS URL for the image
   double answer_lat;
   double answer_lng;
@@ -95,15 +95,26 @@ void delete_objects_from_bucket(GcsClient& client, const string& bucket_name,
                                 const vector<string>& object_names);
 
 // ──────────────────────────────────────────────
-// Game logic (new)
+// Upload Images
 // ──────────────────────────────────────────────
 
-// Scan res/ directory, upload images to GCS, and build an index of all available images.
-// Reads each .supplemental-metadata.json file for coordinates.
-vector<ImageEntry> load_image_index(GcsClient& client,
+void write_image_index_to_db(GcsClient& client,
                                     const string& bucket_name,
                                     const string& directory,
                                     const string& metadata_suffix);
+
+std::vector<ImageEntry> get_images_for_rounds(int rounds);
+
+bool _valid_directory(const std::string& directory);
+
+bool _valid_image_file(const std::string& file_path);
+
+std::string get_metadata_file_path(const std::string& image_file_path, const std::string& metadata_suffix);
+
+// ──────────────────────────────────────────────
+// Game logic 
+// ──────────────────────────────────────────────
+
 
 // Port of the frontend score formula. Returns a score in [0, 5000].
 int calculate_score(double user_lat, double user_lng,
