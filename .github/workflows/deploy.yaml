@@ -10,11 +10,22 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
+
       - name: Set up SSH
         uses: webfactory/ssh-agent@v0.5.4
         with:
           ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+
       - name: Deploy to Oracle Cloud VM
+        env:
+          GCS_KEY_BASE64: ${{ secrets.GCS_KEY_BASE64 }}
         run: |
-          ssh -o StrictHostKeyChecking=no ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} "cd ucigeoguesser && git clean -fd && git pull origin main && sudo ./scripts/deploy-backend.sh"
+          ssh -o StrictHostKeyChecking=no ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} "
+            sudo mkdir -p /root/Downloads && \
+            echo '$GCS_KEY_BASE64' | base64 -d | sudo tee /root/Downloads/key-file.json > /dev/null && \
+            cd ucigeoguesser && \
+            git clean -fd && \
+            git pull origin main && \
+            sudo ./scripts/deploy-backend.sh
+          "
         shell: bash
