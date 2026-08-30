@@ -10,3 +10,8 @@ backend/vcpkg_installed/
 backend/.vcpkg-root
 backend/_deps
 backend/key-file.json
+backend/terraform/.terraform
+backend/terraform/terraform.tfstate
+backend/terraform/terraform.tfstate.backup
+backend/terraform/*.tfvars
+
