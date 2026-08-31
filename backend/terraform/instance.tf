@@ -7,7 +7,7 @@ resource "oci_core_instance" "instance" {
   async                      = null
   availability_domain        = "vkIa:US-SANJOSE-1-AD-1"
   cluster_placement_group_id = null
-  compartment_id             = var.compartment_id
+  compartment_id             = var.oci_compartment_id
   defined_tags = {
     "Oracle-Tags.CreatedBy" = "default/${var.email}"
     "Oracle-Tags.CreatedOn" = "2026-06-03T19:58:28.439Z"
@@ -17,7 +17,7 @@ resource "oci_core_instance" "instance" {
   fault_domain      = "FAULT-DOMAIN-1"
   freeform_tags     = {}
   metadata = {
-    ssh_authorized_keys = var.ssh_public_key
+    ssh_authorized_keys = var.oci_ssh_public_key
   }
   preserve_boot_volume                    = null
   preserve_data_volumes_created_at_launch = null
@@ -93,7 +93,7 @@ resource "oci_core_instance" "instance" {
     private_ip             = "10.0.0.152"
     security_attributes    = {}
     skip_source_dest_check = false
-    subnet_id              = var.subnet_id
+    subnet_id              = var.oci_subnet_id
   }
   instance_options {
     are_legacy_imds_endpoints_disabled = true
@@ -119,7 +119,7 @@ resource "oci_core_instance" "instance" {
     boot_volume_vpus_per_gb         = "10"
     is_preserve_boot_volume_enabled = false
     kms_key_id                      = null
-    source_id                       = var.source_id
+    source_id                       = var.oci_source_id
     source_type                     = "image"
   }
 }
